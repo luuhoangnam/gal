@@ -1,0 +1,101 @@
+---
+phase: 8
+title: "Trạng thái, a11y, polish"
+status: pending
+priority: P1
+effort: "1.5d"
+dependencies: [5, 6, 7]
+---
+
+# Phase 8: Trạng thái, a11y, polish
+
+## Overview
+
+Chín trạng thái bắt buộc, accessibility, và lớp hoàn thiện thị giác. UI trông nghiệp dư gần như
+luôn vì thiếu mấy trạng thái này chứ không phải vì chọn màu xấu — nên đây không phải phase "trang trí".
+
+## Requirements
+
+Toàn bộ 9 trạng thái ở `docs/design-guidelines.md` §6, sàn a11y §7, và checklist §9.
+
+## Architecture
+
+### Chín trạng thái
+
+| Trạng thái | Yêu cầu |
+|---|---|
+| Đang scan, chưa có ảnh | Skeleton lưới nhịp thở, **không** spinner giữa màn |
+| Đang scan, đã có ảnh | Ảnh hiện dần + sợi tiến trình 2px mép trên |
+| Thumbnail chưa sinh | Ô giữ đúng tỉ lệ, nền `--bg-sunken`, shimmer nhẹ |
+| Chưa biết tỉ lệ | Ô vuông 1:1 tạm, re-layout khi có số thật, không nhảy scroll |
+| Ảnh hỏng | Icon + tên file, không phải ô trống câm |
+| Thư mục không có media | Nêu đường dẫn đã quét, **số bundle đã bỏ qua**, gợi ý `--include-bundles` |
+| Không quyền đọc | Nêu đúng đường dẫn bị chặn + cách cấp quyền trên macOS |
+| Bộ lọc không khớp | Nêu bộ lọc đang áp + nút xoá một click |
+| Video đang tải | Poster frame + control, không phải khung đen |
+
+Trạng thái "thư mục không có media" đặc biệt quan trọng: trên máy đo, phần lớn 70k ảnh nằm
+trong `.photoslibrary` bị bỏ qua mặc định, nên user mở `~/Pictures` **sẽ** gặp trạng thái này.
+Nếu nó chỉ nói "không có ảnh" thì đó là bug trải nghiệm, không phải thông báo.
+
+### Accessibility — sàn không thương lượng
+
+- Focus ring luôn thấy: 2px accent + 2px offset. Không bao giờ `outline: none` mà không thay thế.
+- **Lưới ảo hoá phải quản lý focus thủ công** — đây là chỗ virtual scroll hay phá a11y:
+  ô đang focus bị ảo hoá ra khỏi DOM thì focus rơi về `body`, người dùng bàn phím mất vị trí.
+  Giải pháp: giữ ô đang focus trong DOM dù ra ngoài viewport, hoặc dời focus có chủ đích.
+- Lightbox là focus trap thật, `Esc` thoát, focus trả về đúng thumbnail.
+- Mọi thumbnail có `alt` = tên file + ngày. Icon-only button có `aria-label`.
+- Tiến trình scan qua `aria-live="polite"`, **throttle 5s** — không phải mỗi ảnh, nếu không
+  screen reader đọc liên tục không dứt.
+- Zoom trình duyệt 200% không vỡ layout.
+
+### Polish thị giác
+
+Theo design guidelines: chrome không màu, một accent duy nhất, gap lưới 2px, radius thumbnail 2px,
+shadow ngắn và chặt (không phải shadow mờ to), số dùng `tabular-nums`.
+
+Chống AI-slop (§8): không emoji làm icon, không gradient tím-xanh, không hover scale 1.05 trên
+thumbnail (làm vỡ lưới justified — dùng đổi độ sáng).
+
+## Related Code Files
+
+- Create: `web/states.js` (thành phần cho 9 trạng thái), `web/a11y.js` (quản lý focus lưới)
+- Modify: `web/grid.js`, `web/styles.css`, `web/app.js`
+- Create: `test/a11y.spec.js` (Playwright: tab order, focus trap, aria)
+
+## Implementation Steps
+
+1. Dựng từng trạng thái một, có cách kích hoạt thủ công để kiểm tra (query param `?state=`).
+2. Quản lý focus lưới: giữ ô focus trong DOM pool dù ngoài viewport.
+3. `aria-live` cho tiến trình scan, throttle 5s.
+4. Rà `outline: none` trong CSS — mỗi chỗ phải có thay thế nhìn thấy được.
+5. Kiểm contrast bằng script tính WCAG (đã có công thức dùng lúc soạn design guidelines).
+6. Chạy checklist §9 của design guidelines, đánh dấu từng mục.
+7. Test thủ công với VoiceOver: duyệt lưới, mở lightbox, đóng lại.
+
+## Success Criteria
+
+- [ ] Đủ 9 trạng thái, mỗi trạng thái kích hoạt và xem được
+- [ ] Empty state của `~/Pictures` nêu rõ số bundle đã bỏ qua và cách quét vào
+- [ ] Tab qua lưới: focus luôn nhìn thấy, không rơi về `body` khi ô bị ảo hoá
+- [ ] Lightbox: focus trap đúng, `Esc` trả focus về thumbnail nguồn
+- [ ] VoiceOver đọc được tên + ngày ảnh; tiến trình scan không đọc dồn dập
+- [ ] Zoom browser 200% → không vỡ layout, không cuộn ngang
+- [ ] `prefers-reduced-motion` → tắt stagger và FLIP, giữ crossfade 80ms
+- [ ] Không `outline: none` nào thiếu thay thế (grep chứng minh)
+- [ ] Không animate `width`/`height`/`top`/`left` (grep chứng minh)
+- [ ] Toàn bộ checklist §9 design guidelines đạt
+- [ ] Người chưa từng thấy app: xem được ảnh, đổi cỡ lưới, mở full-screen trong 10 giây, không hỏi
+
+## Risk Assessment
+
+**Rủi ro: focus trong lưới ảo hoá là bài toán khó bị đánh giá thấp.** Research cảnh báo đây là
+phần "chán" mà thư viện đã hardened còn code tự viết thì chưa.
+*Tín hiệu:* tab vào lưới rồi mất focus, hoặc tab qua 70k ô.
+*Phản ứng:* lưới là một composite widget — chỉ một tab stop, điều hướng trong lưới bằng phím mũi tên
+(pattern `grid` của ARIA). Đây là cách đúng, không phải cách vá.
+
+**Rủi ro: tiêu chí "10 giây không cần hỏi" mang tính chủ quan.**
+*Tín hiệu:* không có, vì không đo được bằng máy.
+*Phản ứng:* thử với ít nhất 2 người thật chưa xem app. Không tự chấm điểm cho mình.
