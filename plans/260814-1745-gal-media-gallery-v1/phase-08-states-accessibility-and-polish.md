@@ -3,7 +3,7 @@ phase: 8
 title: "Trạng thái, a11y, polish"
 status: pending
 priority: P1
-effort: "1.5d"
+effort: "2.5d"
 dependencies: [5, 6, 7]
 ---
 
@@ -43,7 +43,12 @@ Nếu nó chỉ nói "không có ảnh" thì đó là bug trải nghiệm, khôn
 - Focus ring luôn thấy: 2px accent + 2px offset. Không bao giờ `outline: none` mà không thay thế.
 - **Lưới ảo hoá phải quản lý focus thủ công** — đây là chỗ virtual scroll hay phá a11y:
   ô đang focus bị ảo hoá ra khỏi DOM thì focus rơi về `body`, người dùng bàn phím mất vị trí.
-  Giải pháp: giữ ô đang focus trong DOM dù ra ngoài viewport, hoặc dời focus có chủ đích.
+  Giải pháp: giữ ô đang focus trong DOM dù ra ngoài viewport, và **pool DOM phải gắn theo id**
+  (Phase 5) — pool theo chỉ số làm focus nhảy sang ảnh khác khi layout đổi.
+- **Không dùng ARIA `grid`.** Pattern `grid` giả định số ô mỗi hàng đều nhau; lưới justified có
+  số ô thay đổi từng hàng, khai báo `grid` sẽ khiến screen reader đọc sai toạ độ hàng/cột.
+  Dùng `role="list"` + `role="listitem"` với `aria-setsize`/`aria-posinset` để báo đúng
+  "ảnh thứ N trên tổng M" — đúng ngữ nghĩa cho một dòng ảnh, và không hứa cấu trúc bảng không có thật.
 - Lightbox là focus trap thật, `Esc` thoát, focus trả về đúng thumbnail.
 - Mọi thumbnail có `alt` = tên file + ngày. Icon-only button có `aria-label`.
 - Tiến trình scan qua `aria-live="polite"`, **throttle 5s** — không phải mỗi ảnh, nếu không
@@ -93,8 +98,8 @@ thumbnail (làm vỡ lưới justified — dùng đổi độ sáng).
 **Rủi ro: focus trong lưới ảo hoá là bài toán khó bị đánh giá thấp.** Research cảnh báo đây là
 phần "chán" mà thư viện đã hardened còn code tự viết thì chưa.
 *Tín hiệu:* tab vào lưới rồi mất focus, hoặc tab qua 70k ô.
-*Phản ứng:* lưới là một composite widget — chỉ một tab stop, điều hướng trong lưới bằng phím mũi tên
-(pattern `grid` của ARIA). Đây là cách đúng, không phải cách vá.
+*Phản ứng:* lưới là một composite widget — chỉ một tab stop (roving tabindex), điều hướng bên
+trong bằng phím mũi tên. Ô đang focus luôn được giữ trong DOM dù ra ngoài viewport.
 
 **Rủi ro: tiêu chí "10 giây không cần hỏi" mang tính chủ quan.**
 *Tín hiệu:* không có, vì không đo được bằng máy.

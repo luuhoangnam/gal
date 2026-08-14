@@ -3,7 +3,7 @@ phase: 3
 title: "Metadata pass + SQLite index"
 status: pending
 priority: P1
-effort: "2d"
+effort: "4d"
 dependencies: [2]
 ---
 
@@ -61,6 +61,24 @@ Lưu ý `tkhd` matrix quyết định video quay dọc — bỏ qua sẽ hiển 
 
 Thời gian trong ISO-BMFF tính từ **1904-01-01**, không phải Unix epoch. Lệch 2.082.844.800 giây.
 
+#### Hardening bắt buộc — đây là parser nhị phân chạy trên file không tin cậy
+
+File được chọn **chỉ theo đuôi tên**, nên bất cứ thứ gì tên `.mp4` đều đi qua parser này, trên
+70.000 file. Không hardening thì một file hỏng đủ để treo hoặc giết tiến trình:
+
+| Đầu vào độc hại | Hậu quả nếu không xử lý | Bắt buộc |
+|---|---|---|
+| Box `size == 0` | Vòng lặp vô hạn (offset không tiến) | size < 8 → dừng parse file đó |
+| `largesize` 64-bit | Vượt `Number.MAX_SAFE_INTEGER` | Đọc bằng `BigInt`, từ chối nếu > kích thước file |
+| `moov` khai báo 4GB | `Buffer.alloc` OOM giết tiến trình | Kẹp trần đọc box ở 16MB |
+| Box lồng sâu vô hạn | Tràn stack | Giới hạn độ sâu 16 |
+| `stsd` khai `entry_count` khổng lồ | Vòng lặp cấp phát | Kẹp trần theo số byte còn lại của box |
+| Offset vượt kích thước file | Đọc ngoài vùng | Kiểm mọi offset so với `st.size` trước khi `read` |
+
+**Bắt buộc có fuzz test:** sinh file `.mp4` méo mó ngẫu nhiên (cắt cụt, size sai, byte ngẫu nhiên)
+và khẳng định parser luôn trả về trong thời gian hữu hạn, không ném lỗi chưa bắt, không cấp phát
+quá trần. Không có test này thì coi như box-walker chưa xong.
+
 ### Index — `node:sqlite` builtin
 
 Đo thật: 70k insert trong transaction = 31ms; query khoảng ngày có index = 1ms.
@@ -68,21 +86,56 @@ Không cần `better-sqlite3` (native module sẽ phá vỡ "không cài đặt 
 
 ```sql
 CREATE TABLE media(
-  id INTEGER PRIMARY KEY, rel TEXT NOT NULL, size INTEGER, mtime INTEGER,
-  kind INTEGER,              -- 0 ảnh, 1 video
+  id INTEGER PRIMARY KEY,        -- rowid ỔN ĐỊNH, gắn với rel, KHÔNG phải thứ tự phát hiện
+  rel TEXT NOT NULL UNIQUE,      -- khoá tự nhiên
+  size INTEGER, mtime INTEGER,   -- mtime = Math.floor(mtimeMs), xem bên dưới
+  kind INTEGER,                  -- 0 ảnh, 1 video
   w INTEGER, h INTEGER, orient INTEGER,
-  taken INTEGER,             -- epoch ms, ngày chụp
-  date_src INTEGER,          -- 0 exif, 1 mtime
-  dur REAL, dir TEXT
+  taken INTEGER,                 -- epoch ms, ngày chụp
+  date_src INTEGER,              -- 0 exif, 1 mtime
+  dur REAL, dir TEXT,
+  seen INTEGER                   -- generation của lần scan gần nhất, để phát hiện file mất
 );
+CREATE UNIQUE INDEX ix_rel ON media(rel);
 CREATE INDEX ix_taken ON media(taken);
 CREATE INDEX ix_dir   ON media(dir);
 ```
 
 DB đặt tại `~/.cache/gal/index/<sha1(realpath(root))>.db`.
 
+#### Id phải ổn định — sửa lỗi thiết kế do red team tìm ra
+
+Bản đầu của plan dùng `i` = **thứ tự phát hiện** làm id. Sai: mở lại sau khi thêm/xoá một file
+thì mọi id dịch, và `/api/thumb?i=N` trả **nhầm ảnh**. Id giờ là `rowid` SQLite gắn với `rel`
+qua `INSERT ... ON CONFLICT(rel) DO UPDATE`, nên id của một file không đổi qua các lần chạy.
+
+Hệ quả: pha A phải ghi vào DB để lấy id **trước khi** stream về client, thay vì đánh số đếm
+trong bộ nhớ. Insert 70k mất 31ms nên chi phí không đáng kể.
+
+#### mtime là số thực, không phải số nguyên
+
+Đo thật: `fs.statSync().mtimeMs` = `1780647792984.1538`. Lưu thẳng vào cột INTEGER rồi so sánh
+sẽ lệch, khiến **toàn bộ pha B chạy lại mỗi lần mở** — mất trắng lợi ích cache.
+Chuẩn hoá một chỗ duy nhất: `const mtime = Math.floor(st.mtimeMs)`, dùng cùng công thức đó
+cho cả khoá cache thumbnail ở Phase 4.
+
+#### Hai tiến trình `gal` cùng root
+
+Đo thật: `node:sqlite` mặc định `journal_mode=delete`, writer thứ hai **ném `ERR_SQLITE_ERROR`
+ngay lập tức** (không chờ). Người dùng mở hai cửa sổ terminal là gặp.
+
+Sửa: `PRAGMA journal_mode=WAL` (đã xác nhận bật được) + `PRAGMA busy_timeout=5000`.
+Thêm lockfile khuyến nghị `~/.cache/gal/index/<hash>.lock` chứa pid: tiến trình thứ hai
+phát hiện tiến trình thứ nhất còn sống thì **chỉ đọc**, không chạy pha B, và nói rõ trong UI.
+
+#### Một scan tại một thời điểm cho mỗi root
+
+Tải lại trang hoặc mở tab thứ hai sẽ khởi động walker thứ hai ghi vào cùng không gian id.
+`/api/scan` phải dùng chung một scan đang chạy (multiplex), không sinh scan mới.
+
 **Invalidation khi mở lại:** nạp cache render ngay, rồi chạy pha A nền so sánh.
-File mới → chạy pha B cho riêng chúng. File mất → xoá khỏi grid. Không cần FSEvents/watchman
+Dùng cột `seen` tăng theo generation: sau scan, hàng nào `seen` cũ hơn generation hiện tại là
+file đã mất. File mới → chạy pha B cho riêng chúng. Không cần FSEvents/watchman
 cho v1 vì walk chỉ tốn <1s.
 
 ## Related Code Files
@@ -114,8 +167,14 @@ cho v1 vì walk chỉ tốn <1s.
 - [ ] Ảnh có orientation 6 → tỉ lệ đảo đúng
 - [ ] Benchmark 1000 file thật: ghi lại throughput, ngoại suy 70k, **so với ngân sách 3 phút**
 - [ ] Ảnh hỏng / 0 byte → trả metadata rỗng, không ném lỗi làm dừng pool
-- [ ] Mở lại root đã index → grid đầy đủ <500ms, không chạy lại pha B
+- [ ] Mở lại root đã index → grid đầy đủ <500ms, **không chạy lại pha B** (chứng minh mtime khớp)
 - [ ] Thêm 1 file mới vào thư mục rồi mở lại → file mới xuất hiện
+- [ ] **Id ổn định:** ghi lại id của một ảnh, thêm 100 file vào giữa cây, mở lại → id đó không đổi
+- [ ] Xoá file rồi mở lại → biến khỏi grid (cột `seen`), id các file khác không dịch
+- [ ] Chạy hai tiến trình `gal` cùng root → tiến trình thứ hai không crash, vào chế độ chỉ đọc
+- [ ] Tải lại trang giữa lúc scan → không sinh walker thứ hai (một scan mỗi root)
+- [ ] Fuzz test box-walker: 1000 file méo ngẫu nhiên → không treo, không lỗi chưa bắt, không OOM
+- [ ] File `.mp4` thực chất là text/JPEG → parser từ chối sạch, không crash
 
 ## Risk Assessment
 

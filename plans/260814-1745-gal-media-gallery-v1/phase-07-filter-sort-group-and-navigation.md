@@ -3,7 +3,7 @@ phase: 7
 title: "Filter, sort, group, điều hướng"
 status: pending
 priority: P1
-effort: "1.5d"
+effort: "2.5d"
 dependencies: [5]
 ---
 

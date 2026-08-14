@@ -3,7 +3,7 @@ phase: 5
 title: "Virtualized grid"
 status: pending
 priority: P1
-effort: "2.5d"
+effort: "5d"
 dependencies: [2, 3]
 ---
 
@@ -25,8 +25,10 @@ vứt bỏ thành code production, và sửa lỗi trôi scroll spike đã tìm 
 - Fade-in thumbnail có stagger 15ms, tối đa 8 ô
 
 **Non-functional**
-- 60fps khi cuộn, DOM <2000 node, **RAM <500MB với thumbnail JPEG thật**
+- 60fps khi cuộn, DOM <2000 node
+- RAM: theo ngưỡng chốt lại ở `plan.md` (ngân sách 500MB cũ đã bị đo bác bỏ — xem mục RAM bên dưới)
 - Trôi scroll tích luỹ <10px ở giữa thư viện suốt pha B
+- Chạy được trên WebKit/Safari, không chỉ Chromium
 
 ## Architecture
 
@@ -58,29 +60,78 @@ Spike đo được **trôi 187px** ở giữa thư viện sau 70 lần re-layout
 re-layout lại *dò lại* ô neo theo vị trí y, nên danh tính ô neo đổi giữa các lần, sai số
 ~2,7px cộng dồn.
 
-**Cách làm đúng:** chốt ô neo theo `id` **một lần** khi pha B bắt đầu, giữ nguyên id đó cho tới
-khi người dùng tự cuộn (lúc đó chọn neo mới). Bù `scrollTop` đồng bộ trong cùng tick với patch,
-trước khi paint.
+**Cách làm đúng:** chốt ô neo theo **id ổn định** (rowid từ Phase 3), giữ nguyên id đó suốt
+đợt patch. Bù `scrollTop` đồng bộ trong cùng tick với patch, trước khi paint.
 
-`overflow-anchor` của CSS **không thay thế được**: Safari không hỗ trợ (cả desktop lẫn iOS),
-và trong lưới định vị tuyệt đối bằng `transform` thì browser không quan sát được dịch chuyển đó.
-Bật nó như phòng thủ miễn phí trên Chromium/Firefox, không bao giờ tin cậy nó là cơ chế chính.
+**Neo bằng chỉ số là sai** — pha B mang về ngày chụp EXIF, mà lưới sắp theo ngày chụp, nên
+**thứ tự sắp xếp đổi trong lúc pha B chạy**. Chỉ số `i` trong `placed[]` trỏ sang item khác giữa
+hai lần layout. Phải tra theo id: giữ `Map<id, index>` dựng lại sau mỗi lần layout.
+
+**"Giữ tới khi người dùng cuộn" là định nghĩa không cài đặt được** từ sự kiện `scroll`: chính
+việc bù `scrollTop` của ta cũng phát ra `scroll`, không phân biệt được với cuộn của người dùng.
+Thay bằng: đặt cờ `isCompensating` quanh thao tác bù, bỏ qua đúng sự kiện đó; hoặc dùng
+`scrollend` (đã xác nhận có ở **cả** WebKit lẫn Chromium) kèm cờ.
+
+**Sửa một sai sót trong bản plan trước:** research nói "Safari không hỗ trợ `overflow-anchor`"
+và tôi đã chép lại. **Sai** — đo bằng Playwright WebKit: `CSS.supports('overflow-anchor','auto')`
+trả `true`, và WebKit bù đúng như Chromium. Quyết định tự bù vẫn giữ, nhưng vì lý do đúng:
+lưới định vị bằng `transform` nên browser không quan sát được dịch chuyển, chứ không phải vì
+thiếu hỗ trợ.
 
 ### Cấu trúc dữ liệu
 
-Một mảng `placed[]` **song song thứ tự với `view[]`** → neo bằng chỉ số là O(1), không cần map id.
-Binary search `scrollTop` để tìm dải hiển thị. Pool DOM tái sử dụng, `contain: strict` mỗi ô.
+`placed[]` song song `view[]` cho binary search dải hiển thị (O(log n)), **cộng thêm**
+`Map<id, index>` để tra ô neo và ô đang focus theo id. Pool DOM tái sử dụng, `contain: strict` mỗi ô.
+
+**Pool phải gắn theo id, không theo chỉ số.** Pool đánh theo chỉ số làm hỏng âm thầm:
+`alt` sai ảnh, focus nhảy sang ảnh khác khi layout đổi, và lightbox trả focus về nhầm ô.
 
 Item chưa biết tỉ lệ → dùng 1:1 tạm (đây là lý do phải neo scroll cho tử tế).
 
-### RAM với thumbnail thật — đo sớm
+### Safari không có `requestIdleCallback` — lỗi chết app
 
-Spike đo 40MB nhưng dùng CSS gradient, **không có bitmap decode**. Với JPEG thật, bộ nhớ do
-bitmap đã decode chi phối: 320×240×4 byte ≈ 300KB mỗi ảnh khi decode. 2000 node hiển thị
-≈ 600MB nếu browser giữ hết — **vượt ngân sách 500MB**.
+Đo bằng Playwright: WebKit trả `typeof requestIdleCallback === "undefined"`, Chromium có.
+`gal` mở **browser mặc định**, trên macOS gốc là Safari → `ReferenceError` ngay trong vòng đọc
+NDJSON → lưới đứng nguyên ở placeholder, không bao giờ hiện ảnh.
 
-Giảm thiểu: `loading="lazy"`, gỡ `src` của ô ra khỏi viewport xa (không chỉ ẩn), và
-`decoding="async"`. Đo bằng Chrome DevTools Memory ngay khi có 5000 ảnh thật, **không đợi tới cuối**.
+Dùng `scheduler.postTask` nếu có, rơi về `setTimeout(fn, 0)` — không bao giờ gọi thẳng
+`requestIdleCallback`. Các API khác phase 5-7 giả định đều **có** trong WebKit (đã đo):
+`TextDecoderStream`, `Response.body`, `img.decode()`, `content-visibility`, `contain: strict`,
+`scrollend`, `loading=lazy`. Riêng `performance.memory` **không có** → script đo RAM phải dùng
+RSS tiến trình, không dùng `performance.memory`.
+
+### RAM: ngân sách 500MB không đạt được bằng kiến trúc này — đã đo, không phải suy đoán
+
+Spike đo 40MB nhưng dùng CSS gradient, không có bitmap decode. Đo lại với **JPEG 320px thật**
+(1.200 ảnh, Chromium, cửa sổ ảo hoá tối giản):
+
+| | Đo được |
+|---|---|
+| Ảnh đã cuộn qua | 1.200 |
+| Ô còn `src` | **24** |
+| DOM node tổng | **38** |
+| RAM tăng | **385 MB** |
+| Giữ lại / ảnh | **329 KB** |
+| Cuộn về đầu, chờ 3s | nhả đúng **16 MB** |
+
+**Kết luận: bộ nhớ bám theo số ảnh ĐÃ TỪNG cuộn qua, không phải số ô đang hiển thị.**
+Chỉ 24 ô sống và 38 node mà vẫn 385MB. Đây là cache ảnh đã decode của browser, khoá theo URL,
+giữ lại **sau khi** `<img>` đã nhả.
+
+Hệ quả: ba biện pháp trong bản plan trước (`loading=lazy`, gỡ `src`, thu hẹp overscan)
+**không điều khiển được đại lượng này** — red team đo riêng và ra cùng kết luận (chênh 3%
+giữa có và không gỡ `src`). Lập luận "2000 node × 300KB = 600MB" trong bản trước **sai cả hai chiều**:
+sai vì không phải node quyết định, và sai vì số thật lớn hơn nhiều khi cuộn xa.
+
+**Đòn bẩy thật sự chỉ có hai:**
+1. **Số điểm ảnh.** 160px giảm đáng kể so với 320px, nhưng 320px vốn đã dưới chuẩn Retina ở DPR 2 —
+   hạ nữa là thấy mờ rõ rệt. Đây là đánh đổi chất lượng hình ảnh, không phải tối ưu miễn phí.
+2. **Tự quản lý vòng đời bitmap**: `createImageBitmap` + `blob:` URL + `revokeObjectURL` khi ô
+   rời vùng xa, hoặc vẽ vào `<canvas>` và chủ động giải phóng. Lấy lại quyền kiểm soát từ cache
+   browser, nhưng phải tải lại khi cuộn ngược — đắt và phức tạp hơn nhiều.
+
+**Ngân sách 500MB trong contract cần được xem lại** — xem mục quyết định ở `plan.md`.
+Đo bằng RSS tiến trình, **không** dùng `performance.memory` (WebKit không có).
 
 ## Related Code Files
 
@@ -98,7 +149,8 @@ Giảm thiểu: `loading="lazy"`, gỡ `src` của ô ra khỏi viewport xa (kh�
 3. **Neo scroll theo id cố định** — không lặp lại lỗi của spike. Viết test hồi quy đo trôi
    tích luỹ ở 50% thư viện, ngưỡng <10px.
 4. Ingest NDJSON: `fetch` + `ReadableStream` + `TextDecoderStream`, parse theo dòng,
-   áp patch theo lô 500-1000 trong `requestIdleCallback`.
+   áp patch theo lô 500-1000 qua `scheduler.postTask` với fallback `setTimeout(fn,0)`.
+   **Không gọi `requestIdleCallback`** — WebKit không có (đã đo), sẽ ném `ReferenceError`.
 5. Thumbnail: `<img loading="lazy" decoding="async">`, gỡ `src` khi ra khỏi overscan xa.
 6. Fade-in stagger 15ms tối đa 8 ô; tôn trọng `prefers-reduced-motion`.
 7. Báo viewport về server (`/api/priority`) khi scroll dừng 150ms.
@@ -107,7 +159,11 @@ Giảm thiểu: `loading="lazy"`, gỡ `src` của ô ra khỏi viewport xa (kh�
 
 - [ ] 70k item: cuộn 60fps trở lên, p95 frame time <16,7ms (đo bằng Playwright như spike)
 - [ ] DOM node <2000 tại mọi thời điểm
-- [ ] **RAM <500MB với thumbnail JPEG thật** (đo riêng, đây là tiêu chí dễ trượt nhất)
+- [ ] **Chạy được trên Safari** (browser mặc định macOS) — không `requestIdleCallback` trần
+- [ ] RAM: theo ngưỡng chốt lại ở `plan.md` sau khi chủ dự án quyết. Đo bằng RSS tiến trình,
+      với JPEG thật, sau khi cuộn qua ≥10.000 ảnh — không đo lúc vừa mở
+- [ ] Không rò rỉ phía JS: sau khi cuộn qua 10k ảnh rồi lọc còn 100, RAM phải nhả đáng kể
+      (nếu không nhả thì có tham chiếu JS treo, khác với cache browser)
 - [ ] Trôi scroll tích luỹ <10px ở 15%, 50%, 85% thư viện suốt pha B
 - [ ] Đổi 3 mode qua lại: không reload, vị trí scroll giữ nguyên trong sai số một hàng
 - [ ] Đổi mật độ: ảnh ở tâm viewport vẫn ở tâm sau khi đổi

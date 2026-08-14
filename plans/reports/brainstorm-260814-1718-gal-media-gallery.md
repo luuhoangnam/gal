@@ -30,6 +30,12 @@ Ba USP:
 Sửa/xoá/xoay file · upload · face/object recognition · albums do user tạo · sync hay cloud ·
 multi-user, auth, account · truy cập từ máy khác (LAN) · app đóng gói (Electron/menubar).
 
+> **Đính chính 2026-08-14** (sau red-team + đo thật): tiêu chí "RAM < 500MB" ở mục 2 **đã bị số đo
+> bác bỏ**. Đo với JPEG thật: 1.200 ảnh cuộn qua → 385MB tăng, dù chỉ 24 ô sống và 38 DOM node.
+> Bộ nhớ bám theo số ảnh đã cuộn qua (cache decode của browser), không phải số node.
+> Ngưỡng thay thế đang chờ chủ dự án quyết — xem `plans/260814-1745-gal-media-gallery-v1/plan.md`.
+> Ngoài ra "Safari không hỗ trợ overflow-anchor" (mục Rủi ro) cũng sai: WebKit 26.5 có hỗ trợ.
+
 ## Acceptance criteria
 
 1. `gal ~/Pictures` → ảnh đầu tiên hiện trên màn hình **< 1s**, không chờ scan xong.

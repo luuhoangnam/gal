@@ -31,8 +31,13 @@ Pha A: duyệt toàn cây thư mục, stream đường dẫn về client **ngay 
 
 **Walker** (`src/walk.js`) — async generator, `fs.readdir(dir, {withFileTypes:true})` đệ quy.
 
-- **Chống lặp symlink:** `fs.lstat` lấy `dev`+`ino`, lưu `Set` các cặp đã thăm. Chỉ cần cho
-  thư mục, không cần cho file. Set lookup O(1), 70k entry không đáng kể.
+- **Symlink thư mục: KHÔNG đi vào, mặc định.** Red team tìm ra mâu thuẫn: nếu walker đi theo
+  symlink ra ngoài root thì `resolveInside` của Phase 1 sẽ trả 403 cho chính những file đó —
+  index có mục nhưng không bao giờ xem được. Hai lớp phải nhất quán, và lớp an toàn là lớp đúng.
+  Cờ `--follow-symlinks` cho người thật sự cần; khi bật thì root hợp lệ của Phase 1 phải mở rộng
+  theo, không phải chỉ nới walker.
+- **Chống lặp symlink** (khi bật cờ trên): `fs.lstat` lấy `dev`+`ino`, lưu `Set` các cặp đã thăm.
+  Set lookup O(1), 70k entry không đáng kể.
 - **Bỏ qua bundle:** kiểm tra theo **đuôi thư mục** tại mọi độ sâu, không phải glob toàn cục.
   `fs.glob` builtin không làm tốt việc này nên tự viết walker.
 - **EACCES:** try/catch quanh mỗi `readdir`, đếm số thư mục bị bỏ qua để hiển thị ở empty state
@@ -44,14 +49,20 @@ Pha A: duyệt toàn cây thư mục, stream đường dẫn về client **ngay 
 **Transport** (`GET /api/scan`) — NDJSON, mỗi dòng một lô:
 
 ```
-{"t":"a","items":[{"i":0,"p":"rel/path.heic","s":2481234,"m":1699999999,"v":0}, ...]}
+{"t":"a","items":[{"i":41,"p":"rel/path.heic","s":2481234,"m":1699999999,"v":0}, ...]}
 {"t":"a","items":[...]}
 {"t":"done_a","n":70000,"skipped":3,"dirs":2847}
 ```
 
-`i` là id ổn định (thứ tự phát hiện) — **id này là khoá neo scroll ở Phase 5**, không được đổi.
+`i` là **rowid SQLite gắn với đường dẫn** (Phase 3), **không** phải số đếm theo thứ tự phát hiện.
+Dùng thứ tự phát hiện là lỗi: thêm hoặc xoá một file thì mọi id dịch, và `/api/thumb?i=N` trả
+nhầm ảnh ở lần mở sau. Id này còn là khoá neo scroll ở Phase 5 nên bắt buộc ổn định qua các lần chạy.
+
 Lô 500-1000 item. Dùng NDJSON + `ReadableStream` chứ không SSE: backpressure native,
 client kiểm soát nhịp đọc, không có thuế framing `data: ` mỗi dòng.
+
+**Một scan cho mỗi root.** Tải lại trang hoặc mở tab thứ hai không được sinh walker thứ hai
+ghi vào cùng không gian id — request thứ hai gắn vào scan đang chạy.
 
 Đường dẫn gửi đi là **relative so với root**, không phải absolute — giảm byte và không rò
 cấu trúc thư mục máy ra ngoài response.

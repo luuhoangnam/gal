@@ -3,7 +3,7 @@ phase: 6
 title: "Lightbox + video"
 status: pending
 priority: P1
-effort: "1.5d"
+effort: "2.5d"
 dependencies: [1, 5]
 ---
 
@@ -25,7 +25,7 @@ Xem ảnh full-screen với zoom/pan, chuyển prev/next **không chớp trắng
 
 **Non-functional**
 - Nền lightbox tối `--bg-immersive` dù app là light mode (design guidelines §1.2)
-- Preload ±2, `await img.decode()` trước khi swap
+- Preload ±2; dùng `msrc` (thumbnail sẵn có) làm cách chính chống chớp trắng, `decode()` gate chỉ khi cần
 
 ## Architecture
 
@@ -38,16 +38,16 @@ PhotoSwipe 5.4.4, MIT, install base lớn.
 `preload` mặc định của nó đã đáp ứng yêu cầu ±2 — "renders only nearby slides, but not less than 2".
 
 **Nhưng nó không tự gọi `img.decode()` trước khi swap.** Đây là khoảng trống so với contract
-(yêu cầu "không chớp trắng"). Cần lớp mỏng bọc hook `contentLoad`/`contentAppend`:
+(yêu cầu "không chớp trắng").
 
-```js
-lightbox.on('contentLoad', ({content}) => {
-  if (content.type !== 'image') return;
-  const img = new Image();
-  img.src = content.data.src;
-  content.__ready = img.decode().then(() => img);   // gate swap trên decode xong
-});
-```
+**Cách chính, dùng trước:** PhotoSwipe có sẵn cơ chế `msrc` — ảnh thumbnail độ phân giải thấp
+hiển thị ngay tại chỗ trong khi ảnh full-res tải nền. Đây là giải pháp có sẵn cho đúng vấn đề
+"chớp trắng", và lưới đã có sẵn thumbnail để đưa vào `msrc`. Làm cái này trước.
+
+**Chỉ khi `msrc` chưa đủ** mới thêm lớp `decode()` gate. Lưu ý bản nháp trước của plan này có
+snippet gán `content.__ready = img.decode()...` mà **không ai `await` nó** — viết vậy là vô nghĩa,
+promise treo không chặn gì cả. Muốn gate thật thì phải chặn trong lifecycle của PhotoSwipe
+(giữ slide cũ tới khi promise resolve), không chỉ gán một thuộc tính.
 
 Phải xác minh thời điểm swap thật trong source v5 — issue #1210/#904 cho thấy cộng đồng
 từng vướng chỗ này, nên đừng tin mặc định là đủ.

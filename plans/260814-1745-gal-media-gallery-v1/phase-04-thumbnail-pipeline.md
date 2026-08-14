@@ -3,7 +3,7 @@ phase: 4
 title: "Thumbnail pipeline"
 status: pending
 priority: P1
-effort: "1.5d"
+effort: "2.5d"
 dependencies: [1, 3]
 ---
 
@@ -17,8 +17,15 @@ Không bao giờ warm toàn bộ 70k — đó là cách các tool static-generat
 ## Requirements
 
 **Functional**
-- `GET /api/thumb?i=<id>&s=<size>` trả JPEG, sinh nếu chưa có
-- Cache đĩa `~/.cache/gal/thumbs/<hash>.jpg`, key = `sha1(realpath + mtime + size + targetSize)`
+- `GET /api/thumb/<hash>.jpg` trả JPEG, sinh nếu chưa có.
+  **URL chứa hash nội dung, không phải id** — nếu dùng `?i=<id>` kèm `Cache-Control: immutable`
+  thì browser sẽ tái dùng thumbnail của root khác khi trùng cổng (dải ephemeral macOS chỉ có
+  16384 cổng, và `--port` làm nó thành tất định).
+- Cache đĩa `~/.cache/gal/thumbs/<hash>.jpg`, key = `sha1(realpath + Math.floor(mtimeMs) + size + targetSize)`.
+  `Math.floor` bắt buộc: `mtimeMs` là số thực (đo thật `…984.1538`), làm tròn khác nhau giữa
+  Phase 3 và Phase 4 sẽ khiến cache không bao giờ hit.
+- **Negative cache cho file lỗi**: file hỏng phải được nhớ là hỏng, nếu không mỗi lần cuộn qua
+  lại spawn ffmpeg — bão process trên thư mục có nhiều file rác.
 - Ảnh, HEIC, PNG, và **poster frame video** — cùng một code path ffmpeg
 - File hỏng → trả placeholder, **không** để pipeline chết
 - Ưu tiên theo viewport: client báo vùng đang xem, hàng đợi phục vụ vùng đó trước
@@ -89,6 +96,10 @@ theo LRU dựa trên `atime`. Không chạy nền liên tục.
 - [ ] Sửa mtime file → thumbnail tự sinh lại
 - [ ] Lần thứ hai mở cùng thư mục → thumbnail lấy từ cache, không gọi ffmpeg
 - [ ] Cache vượt 2GB → dọn LRU, không xoá file đang dùng
+- [ ] Thư mục 500 file hỏng: cuộn qua lại nhiều lần → mỗi file chỉ spawn ffmpeg **một lần**
+      (negative cache hoạt động), không bão process
+- [ ] Chạy `gal` trên root A rồi root B trùng cổng → không lẫn thumbnail giữa hai root
+- [ ] Khoá cache khớp giữa Phase 3 và Phase 4 → mở lại lần hai không sinh lại thumbnail nào
 
 ## Risk Assessment
 

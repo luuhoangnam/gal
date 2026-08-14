@@ -3,7 +3,7 @@ phase: 1
 title: "CLI, server, security core"
 status: pending
 priority: P1
-effort: "1.5d"
+effort: "2.5d"
 dependencies: []
 ---
 
@@ -42,7 +42,27 @@ vì app phục vụ file tuỳ ý trên ổ đĩa, làm sai ở đây là lỗ h
    so hostname chứ không so IP, nên request đi lọt như same-origin. Vite đã dính đúng lỗi này
    (GHSA-vg6x-rcgg-rjx6), webpack-dev-server cũng vậy.
 
-3. **Port ngẫu nhiên** — defense in depth, chống dò mù. Giữ, nhưng không tin cậy một mình.
+3. **Origin / `Sec-Fetch-Site` validation** — Host một mình **cũng không đủ**.
+   `<img src="http://127.0.0.1:PORT/api/thumb?i=5">` từ trang bất kỳ sẽ gửi Host **hợp lệ**
+   (`127.0.0.1:PORT`) và đi lọt qua lớp 2. Phải chặn thêm: từ chối request có `Origin` khác
+   origin của chính server, và từ chối `Sec-Fetch-Site: cross-site`.
+
+4. **Content-type an toàn cho `/api/file`** — đây là lỗ hổng nặng nhất nếu bỏ qua.
+   Thư mục ảnh của user có thể chứa file `.html` hoặc `.svg`. Phục vụ chúng từ cùng origin
+   nghĩa là **script chạy trong origin của gal** và đọc được mọi file dưới root.
+   Bắt buộc: allowlist đuôi media (`src/media-types.js` đã có), `X-Content-Type-Options: nosniff`,
+   và `Content-Disposition: attachment` cho mọi thứ không phải ảnh/video đã biết.
+   SVG phải phục vụ dưới `Content-Type: image/svg+xml` kèm CSP `sandbox`, hoặc đơn giản hơn:
+   **loại SVG khỏi danh sách media v1**.
+
+5. **Port ngẫu nhiên** — defense in depth, chống dò mù. Giữ, nhưng không tin cậy một mình.
+   Lưu ý: dải ephemeral macOS là 49152-65535 (đo bằng `sysctl`) = **16384 cổng**, nên trùng cổng
+   giữa các lần chạy khác root là chuyện sẽ xảy ra — xem mục cache bên dưới.
+
+6. **Khoá cache thumbnail phải theo nội dung, không theo URL.** `/api/thumb?i=5` với
+   `Cache-Control: immutable` sẽ khiến browser tái dùng thumbnail của **root khác** khi trùng
+   cổng (16384 cổng, và `--port` ở Phase 9 làm nó thành tất định). Sửa: URL phải chứa hash
+   nội dung, ví dụ `/api/thumb/<hash>.jpg`, thì `immutable` mới đúng nghĩa.
 
 **HTTP Range** (`src/range.js`) — Node `http` không cho sẵn, phải tự viết. Phải xử lý:
 `206`, `Content-Range: bytes s-e/total`, `Accept-Ranges: bytes` (kể cả trên GET thường),
@@ -79,9 +99,14 @@ Không crash, không log, chỉ chậm — loại bug dễ ship mà không ai th
 - [ ] `gal <thư mục>` mở browser tới trang trắng có tiêu đề, in URL ra terminal
 - [ ] `gal /không/tồn/tại` → thông báo lỗi rõ, exit 1
 - [ ] `curl -H 'Host: evil.com' <url>` → 403
+- [ ] `curl -H 'Origin: https://evil.com' <url>/api/thumb/...` → 403
+- [ ] `curl -H 'Sec-Fetch-Site: cross-site' <url>/api/file?...` → 403
+- [ ] File `.html` trong thư mục ảnh → **không** phục vụ dạng `text/html` thực thi được
+- [ ] Mọi response `/api/file` có `X-Content-Type-Options: nosniff`
 - [ ] `curl '<url>/api/file?p=../../../../etc/passwd'` → 403, và mọi biến thể encode
 - [ ] Test: path traversal qua symlink trỏ ra ngoài root → chặn
 - [ ] Test: `/ROOT/x.jpg` với root `/root` không bypass được (APFS case-insensitivity)
+- [ ] URL thumbnail chứa hash nội dung, không phải chỉ số → đổi root không lấy nhầm cache cũ
 - [ ] Test Range: full, `bytes=0-99`, `bytes=100-`, `bytes=-500`, `If-Range` khớp và không khớp, range quá size → 416
 - [ ] `curl -r 0-99 <url>/api/file?p=... -o -` trả đúng 100 byte, status 206
 
