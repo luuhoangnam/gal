@@ -15,7 +15,12 @@ export const MEDIA_TYPES = {
   '.tiff': 'image/tiff',
   '.mp4': 'video/mp4',
   '.m4v': 'video/mp4',
-  '.mov': 'video/quicktime',
+  // .mov khai là video/mp4 chứ KHÔNG phải video/quicktime, dù đó mới là MIME
+  // đúng chuẩn: `canPlayType('video/quicktime')` của Chrome trả về chuỗi rỗng và
+  // nó từ chối phát, kể cả khi bên trong là H.264 y hệt một file .mp4 phát được.
+  // .mov là ISO base media container giống .mp4 — đổi nhãn là đủ để nó chơi.
+  // (ProRes/HEVC bên trong .mov thì vẫn chịu: đó là giới hạn codec, không phải nhãn.)
+  '.mov': 'video/mp4',
   '.webm': 'video/webm',
   '.mkv': 'video/x-matroska',
   '.avi': 'video/x-msvideo',
