@@ -12,6 +12,8 @@
   --r-thumb: 2px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
   --topbar: 52px;
+  /* Ảnh cần nền trung tính tối để mắt đọc đúng màu, kể cả khi app là light mode */
+  --bg-immersive: #0b0b0d;
 }
 
 * {
@@ -114,6 +116,12 @@ button {
   background: var(--bg-sunken);
   color: var(--fg-primary);
 }
+/* Vừa là chỉ số mật độ hiện tại, vừa là nút đưa về mặc định */
+.zoomval {
+  width: 46px;
+  font-size: 12px;
+  font-weight: 530;
+}
 
 /* Tiến trình quét là một sợi chỉ, không bao giờ là modal chặn màn hình */
 .scan {
@@ -166,6 +174,13 @@ button {
   border-radius: inherit;
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.055);
   pointer-events: none;
+}
+/* `contain: strict` cắt mất outline vẽ ngoài ô → vẽ viền focus vào bên trong */
+.tile:focus-visible {
+  outline: none;
+}
+.tile:focus-visible::after {
+  box-shadow: inset 0 0 0 3px var(--accent);
 }
 .tile.pending {
   animation: sh 1.4s infinite;
@@ -246,6 +261,46 @@ button {
   color: var(--fg-primary);
   font-size: 15px;
   margin-bottom: 4px;
+}
+
+/* ---------- lightbox ---------- */
+.pswp {
+  --pswp-bg: var(--bg-immersive);
+  --pswp-icon-color: #fff;
+  --pswp-icon-color-secondary: #0b0b0d;
+  --pswp-placeholder-bg: var(--bg-immersive);
+  z-index: 100;
+}
+.pswp__video {
+  width: 100%;
+  /* Chừa chỗ cho thanh điều khiển native: full height thì nó nằm đè lên
+     thanh thông tin ở đáy */
+  height: calc(100% - 44px);
+  object-fit: contain;
+}
+/* Trắng trên #0b0b0d ≈ 19:1 — vượt yêu cầu 18:1 của design guidelines */
+.pswp__meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  padding: 34px 18px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  color: #fff;
+  font-size: 13px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+  pointer-events: none;
+}
+.pswp__meta b {
+  font-weight: 590;
+  font-size: 14px;
+}
+.pswp__meta span {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,4 +1,4 @@
-import { createGrid, yieldToMain } from './grid.js';
+import { createGrid, yieldToMain, DEFAULT_TARGET } from './grid.js';
 
 const $ = (s) => document.querySelector(s);
 const fmtN = (n) => n.toLocaleString('vi-VN');
@@ -18,7 +18,19 @@ const grid = createGrid({
       body: JSON.stringify({ keys }),
     }).catch(() => {});
   },
+  onOpen: (index) => openLightbox(index),
 });
+
+// PhotoSwipe chỉ tải khi người dùng thật sự mở ảnh đầu tiên — lưới hiện ra
+// không phải chờ nó.
+let lightbox = null;
+async function openLightbox(index) {
+  if (lightbox === null) {
+    const { createLightbox } = await import('./lightbox.js');
+    lightbox = createLightbox({ grid });
+  }
+  lightbox.open(index);
+}
 
 // ---------- trạng thái dữ liệu ----------
 const items = new Map(); // id -> item
@@ -27,12 +39,6 @@ let scheduled = false;
 let scanned = 0;
 let metaDone = 0;
 let phase = 'a';
-
-/** EXIF orientation 5-8 là xoay 90°, w/h trong file bị đảo so với lúc hiển thị. */
-function aspect(w, h, orient) {
-  if (!w || !h) return 0;
-  return orient >= 5 && orient <= 8 ? h / w : w / h;
-}
 
 function ingest(o) {
   const i = o.i ?? o.id; // pha A phát `i`, hàng từ cache phát `id`
@@ -46,12 +52,21 @@ function ingest(o) {
     v: o.v === 1,
     k: o.k,
     ar: 0,
+    w: 0,
+    h: 0,
     t: o.m,
     ds: null,
     dur: null,
   };
   if (o.k) it.k = o.k;
-  if (o.w) it.ar = aspect(o.w, o.h, o.orient);
+  // w/h từ server ĐÃ là kích thước lúc hiển thị: `exif-image` đảo theo EXIF
+  // orientation và `video-meta` đảo theo rotation trước khi phát. Đảo lần nữa ở
+  // đây là quay hai lần — mọi ảnh dọc chụp bằng máy cầm ngang sẽ sai tỉ lệ.
+  if (o.w && o.h) {
+    it.w = o.w;
+    it.h = o.h;
+    it.ar = o.w / o.h;
+  }
   if (o.taken) {
     it.t = o.taken;
     it.ds = o.ds;
@@ -171,13 +186,20 @@ function setMode(m) {
 for (const b of document.querySelectorAll('[data-mode]')) {
   b.onclick = () => setMode(b.dataset.mode);
 }
-$('#plus').onclick = () => grid.setTarget(grid.target * 1.25);
-$('#minus').onclick = () => grid.setTarget(grid.target / 1.25);
+function setTarget(t) {
+  grid.setTarget(t);
+  $('#reset').textContent = `${Math.round((grid.target / DEFAULT_TARGET) * 100)}%`;
+}
+$('#plus').onclick = () => setTarget(grid.target * 1.25);
+$('#minus').onclick = () => setTarget(grid.target / 1.25);
+$('#reset').onclick = () => setTarget(DEFAULT_TARGET);
 
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
-  if (e.key === '+' || e.key === '=') grid.setTarget(grid.target * 1.25);
-  else if (e.key === '-') grid.setTarget(grid.target / 1.25);
+  if (lightbox?.isOpen()) return; // lightbox tự lo phím của nó
+  if (e.key === '+' || e.key === '=') setTarget(grid.target * 1.25);
+  else if (e.key === '-') setTarget(grid.target / 1.25);
+  else if (e.key === '0') setTarget(DEFAULT_TARGET);
   else if (e.key === '1') setMode('justified');
   else if (e.key === '2') setMode('square');
   else if (e.key === '3') setMode('masonry');

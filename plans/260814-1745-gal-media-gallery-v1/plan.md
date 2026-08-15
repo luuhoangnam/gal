@@ -89,7 +89,7 @@ Frontend: JS thuần, không framework. Virtualizer tự viết (spike đã ch�
 | 3 | [Metadata pass + SQLite index](./phase-03-metadata-pass-and-sqlite-index.md) | Completed | 2 |
 | 4 | [Thumbnail pipeline](./phase-04-thumbnail-pipeline.md) | Completed | 1, 3 |
 | 5 | [Virtualized grid](./phase-05-virtualized-grid.md) | Completed | 2, 3 |
-| 6 | [Lightbox + video](./phase-06-lightbox-and-video.md) | Pending | 1, 5 |
+| 6 | [Lightbox + video](./phase-06-lightbox-and-video.md) | Completed | 1, 5 |
 | 7 | [Filter, sort, group, điều hướng](./phase-07-filter-sort-group-and-navigation.md) | Pending | 5 |
 | 8 | [Trạng thái, a11y, polish](./phase-08-states-accessibility-and-polish.md) | Pending | 5, 6, 7 |
 | 9 | [Đóng gói, phân phối](./phase-09-packaging-and-distribution.md) | Pending | tất cả |

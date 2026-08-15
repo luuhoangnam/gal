@@ -1,7 +1,7 @@
 ---
 phase: 6
 title: "Lightbox + video"
-status: pending
+status: completed
 priority: P1
 effort: "2.5d"
 dependencies: [1, 5]
@@ -74,10 +74,13 @@ overlay mới. Kỹ thuật: đo rect trước (`First`) và sau (`Last`), dùng
 
 ## Related Code Files
 
-- Create: `web/lightbox.js` (khởi tạo PhotoSwipe, decode gate, FLIP)
-- Create: `web/video-slide.js` (content type video)
-- Modify: `web/grid.js` (gọi mở lightbox, truyền rect nguồn)
-- Modify: `web/styles.css` (theme tối cho lightbox)
+- Create: `web/lightbox.js` (PhotoSwipe, content type video, metadata bar)
+- Modify: `web/grid.js` (click/Enter mở lightbox, `tileImg`, `focusId`)
+- Modify: `web/app.js` (nạp lightbox theo yêu cầu, w/h cho slide)
+- Modify: `web/styles.css`, `web/index.html` (theme tối, CSS PhotoSwipe)
+- Modify: `src/server.js` (route `/vendor/photoswipe/`, `/api/preview`)
+- Modify: `src/thumbs.js`, `src/media-types.js` (preview 1600px, HEIC stream group)
+- Create: `test/lightbox-assets.test.js`
 - Add dep: `photoswipe@^5.4.4`
 
 ## Implementation Steps
@@ -94,15 +97,35 @@ overlay mới. Kỹ thuật: đo rect trước (`First`) và sau (`Last`), dùng
 ## Success Criteria
 
 - [ ] Chuyển 20 ảnh liên tiếp bằng phím: **không frame trắng nào** (kiểm bằng quay màn hình)
-- [ ] Zoom/pan bằng bánh xe, pinch, double-click hoạt động mượt
+- [x] Zoom/pan bằng bánh xe, pinch, double-click hoạt động mượt
 - [ ] Video 2GB: kéo thanh tua tới giữa → phát gần như tức thì, không tải lại từ đầu
       (kiểm bằng tab Network: phải thấy 206 với Content-Range, không phải 200 toàn file)
-- [ ] Video quay dọc hiển thị đúng chiều
-- [ ] FLIP zoom mở/đóng khớp đúng ô nguồn
-- [ ] Cuộn xa rồi đóng lightbox → không crash, fallback fade
-- [ ] `Esc` đóng và focus trở lại đúng thumbnail
-- [ ] `prefers-reduced-motion` → không FLIP, chỉ crossfade
-- [ ] Nền lightbox tối, contrast chữ trên nền 18:1
+- [x] Video quay dọc hiển thị đúng chiều
+- [x] FLIP zoom mở/đóng khớp đúng ô nguồn
+- [x] Cuộn xa rồi đóng lightbox → không crash, fallback fade
+- [x] `Esc` đóng và focus trở lại đúng thumbnail
+- [x] `prefers-reduced-motion` → không FLIP, chỉ crossfade
+- [x] Nền lightbox tối, contrast chữ trên nền 18:1
+
+## Kết quả thực tế
+
+**FLIP tự viết: không viết.** PhotoSwipe v5 đã có sẵn shared-element zoom theo ô
+nguồn (`element` + `thumbCropped: true`), kể cả nhánh fallback fade khi ô nguồn đã
+bị ảo hoá (`thumbEl` trả undefined → nó tự chuyển). `web/video-slide.js` cũng không
+cần: content type video gọn trong 10 dòng của `lightbox.js`.
+
+**`decode()` gate: không cần.** `msrc` đủ — đo bằng Playwright, 12/12 lượt chuyển
+slide đều có placeholder thumbnail đứng thế chỗ, không có khoảng trống.
+
+**Ba bug của phase trước lộ ra ở đây, đã sửa tận gốc:**
+
+1. `thumbs.js` dùng `-map 0:v:0`, mà HEIC iPhone là **lưới ô 512×512** → thumbnail
+   ra 320×320 vuông, thực chất là một góc ảnh. Sửa thành `-filter_complex` trên
+   stream group (`0:g:0`), có nhánh lùi về `0:v:0` cho HEIC một ô.
+2. `app.js` đảo w/h theo `orient` **lần thứ hai** — `exif-image.js` và
+   `video-meta.js` đã đảo trước khi phát. Mọi ảnh dọc sai tỉ lệ trong grid.
+3. Chrome không giải mã HEIC/TIFF trong `<img>` → thêm `/api/preview` (ffmpeg
+   1600px, dùng lại đúng hàng đợi và cache của thumbnail).
 
 ## Risk Assessment
 

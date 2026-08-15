@@ -21,10 +21,12 @@ const fmtDay = (t) => {
   return `${d.getDate()} tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
 };
 
-export function createGrid({ scroller, sizer, stick, onViewport }) {
+export const DEFAULT_TARGET = 190;
+
+export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
   let view = [];
   let mode = 'justified';
-  let target = 190;
+  let target = DEFAULT_TARGET;
   let placed = [];
   let heads = [];
   let byId = new Map();
@@ -78,6 +80,7 @@ export function createGrid({ scroller, sizer, stick, onViewport }) {
     // ARIA `list`, không phải `grid`: `grid` giả định số ô mỗi hàng đều nhau,
     // justified thì không.
     el.setAttribute('role', 'listitem');
+    el.tabIndex = 0;
     el.innerHTML = '<img alt="" decoding="async" loading="lazy"><span class="vid"></span>';
     sizer.appendChild(el);
     return el;
@@ -206,6 +209,24 @@ export function createGrid({ scroller, sizer, stick, onViewport }) {
 
   addEventListener('resize', () => relayout(8));
 
+  // Uỷ quyền trên container: 2000 ô mà gắn listener từng ô là 2000 lần đăng ký
+  // mỗi lần re-layout.
+  function openFrom(el) {
+    const i = byId.get(Number(el.dataset.id));
+    if (i !== undefined) onOpen?.(i);
+  }
+  sizer.addEventListener('click', (e) => {
+    const el = e.target.closest?.('.tile');
+    if (el) openFrom(el);
+  });
+  sizer.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest?.('.tile');
+    if (!el) return;
+    e.preventDefault();
+    openFrom(el);
+  });
+
   return {
     get mode() {
       return mode;
@@ -234,6 +255,28 @@ export function createGrid({ scroller, sizer, stick, onViewport }) {
     },
     relayout,
     render,
+    /** Item ở vị trí hiển thị `i` — lightbox đi theo đúng thứ tự mắt thấy. */
+    at: (i) => placed[i]?.o,
+    /**
+     * Ảnh thumbnail của item, hoặc undefined nếu ô đã bị ảo hoá khỏi DOM.
+     * PhotoSwipe dùng nó làm gốc zoom; không có thì nó tự lùi về fade.
+     */
+    tileImg(id) {
+      const el = bound.get(id);
+      return el && !el.hidden ? el.firstChild : undefined;
+    },
+    /** Cuộn tới item rồi trả focus về ô của nó — dùng khi đóng lightbox. */
+    focusId(id) {
+      const i = byId.get(id);
+      if (i === undefined) return;
+      const p = placed[i];
+      const top = scroller.scrollTop;
+      if (p.y < top || p.y + p.h > top + scroller.clientHeight) {
+        scroller.scrollTop = p.y - scroller.clientHeight / 2 + p.h / 2;
+        render();
+      }
+      bound.get(id)?.focus({ preventScroll: true });
+    },
     /** Cho script đo tự động (Playwright) và test hồi quy trôi scroll. */
     get placed() {
       return placed;

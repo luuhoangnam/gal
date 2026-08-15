@@ -28,7 +28,7 @@ export function thumbKey(absPath, mtime, size, target = TARGET) {
 }
 
 export function createThumbs(root, { cacheDir, maxBytes = DEFAULT_MAX_BYTES } = {}) {
-  const dir = cacheDir ?? path.join(homedir(), '.cache', 'gal', 'thumbs');
+  const dir = cacheDir ?? path.join(cacheDirFor(root), 'thumbs');
   mkdirSync(dir, { recursive: true });
 
   // hash → thông tin file nguồn. Client chỉ cầm hash nên server phải tra ngược.
