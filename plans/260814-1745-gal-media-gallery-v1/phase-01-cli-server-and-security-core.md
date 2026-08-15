@@ -1,7 +1,7 @@
 ---
 phase: 1
 title: "CLI, server, security core"
-status: pending
+status: completed
 priority: P1
 effort: "2.5d"
 dependencies: []
@@ -23,7 +23,7 @@ vì app phục vụ file tuỳ ý trên ổ đĩa, làm sai ở đây là lỗ h
 - Không đối số → in usage ngắn, exit 0. Path không tồn tại → lỗi rõ ràng, exit 1
 
 **Non-functional**
-- Chỉ bind loopback. Không bao giờ 0.0.0.0
+- Mặc định chỉ bind loopback. Bind `0.0.0.0` chỉ khi user tự bật `--lan`
 - Mọi request bị từ chối nếu `Host` header không phải `127.0.0.1:<port>` hoặc `localhost:<port>`
 - Mọi path phải nằm trong root sau khi `realpath`
 
@@ -99,20 +99,37 @@ Không crash, không log, chỉ chậm — loại bug dễ ship mà không ai th
 
 ## Success Criteria
 
-- [ ] `gal <thư mục>` mở **Chrome** tới trang có tiêu đề, in URL ra terminal
+- [x] `gal <thư mục>` mở **Chrome** tới trang có tiêu đề, in URL ra terminal
 - [ ] Máy không có Chrome → vẫn khởi động server, in URL + ghi chú, không thoát lỗi
-- [ ] `gal /không/tồn/tại` → thông báo lỗi rõ, exit 1
-- [ ] `curl -H 'Host: evil.com' <url>` → 403
-- [ ] `curl -H 'Origin: https://evil.com' <url>/api/thumb/...` → 403
-- [ ] `curl -H 'Sec-Fetch-Site: cross-site' <url>/api/file?...` → 403
-- [ ] File `.html` trong thư mục ảnh → **không** phục vụ dạng `text/html` thực thi được
-- [ ] Mọi response `/api/file` có `X-Content-Type-Options: nosniff`
-- [ ] `curl '<url>/api/file?p=../../../../etc/passwd'` → 403, và mọi biến thể encode
-- [ ] Test: path traversal qua symlink trỏ ra ngoài root → chặn
-- [ ] Test: `/ROOT/x.jpg` với root `/root` không bypass được (APFS case-insensitivity)
-- [ ] URL thumbnail chứa hash nội dung, không phải chỉ số → đổi root không lấy nhầm cache cũ
-- [ ] Test Range: full, `bytes=0-99`, `bytes=100-`, `bytes=-500`, `If-Range` khớp và không khớp, range quá size → 416
-- [ ] `curl -r 0-99 <url>/api/file?p=... -o -` trả đúng 100 byte, status 206
+      *(code path có: `open` exit≠0 → in ghi chú; chưa chạy được trên máy không có Chrome)*
+- [x] `gal /không/tồn/tại` → thông báo lỗi rõ, exit 1
+- [x] `curl -H 'Host: evil.com' <url>` → 403
+- [x] `curl -H 'Origin: https://evil.com' <url>/api/...` → 403
+- [x] `curl -H 'Sec-Fetch-Site: cross-site' <url>/api/file?...` → 403
+- [x] File `.html` trong thư mục ảnh → **không** phục vụ dạng `text/html` thực thi được (403, ngoài allowlist)
+- [x] Mọi response `/api/file` có `X-Content-Type-Options: nosniff`
+- [x] `curl '<url>/api/file?p=../../../../etc/passwd'` → 403, và mọi biến thể encode
+- [x] Test: path traversal qua symlink trỏ ra ngoài root → chặn
+- [x] Test: `/ROOT/x.jpg` với root `/root` không bypass được (APFS case-insensitivity)
+- [ ] URL thumbnail chứa hash nội dung → thuộc Phase 4, chưa có route `/api/thumb`
+- [x] Test Range: full, `bytes=0-99`, `bytes=100-`, `bytes=-500`, `If-Range` khớp và không khớp, range quá size → 416
+- [x] `curl -r 0-99 <url>/api/file?p=... -o -` trả đúng 100 byte, status 206
+
+## Ghi chú thực hiện
+
+- Đuôi ngoài allowlist media → **403**, không phải `Content-Disposition: attachment`.
+  Ít đường đi hơn, cùng hiệu quả phòng thủ. SVG bị loại khỏi allowlist đúng như phân tích.
+- `Sec-Fetch-Site` chỉ chấp nhận `same-origin` và `none`. `same-site` cũng bị chặn vì
+  localhost khác cổng vẫn gửi `same-site` mà đã là cross-origin.
+- Test Host guard dùng `node:http` thô — `fetch`/undici cấm ghi đè header `Host`.
+- ETag = `size-mtime` (mtime đã `Math.floor`), dùng cho cả `If-Range`.
+- **`--lan` (yêu cầu của chủ dự án 2026-08-15)** — nới yêu cầu "chỉ bind loopback,
+  không bao giờ 0.0.0.0" thành opt-in. Không bật cờ thì hành vi cũ giữ nguyên.
+  Bật thì bind `0.0.0.0`, và Host guard nới đúng bằng **allowlist địa chỉ thật của máy**
+  (`os.networkInterfaces()` + hostname + `.local`), không phải chấp nhận mọi Host —
+  nới hết là mở lại đúng lỗ DNS rebinding mà lớp 2 sinh ra để chặn.
+  Đánh đổi còn lại: trong LAN không có xác thực, ai biết URL đều xem được toàn bộ media
+  dưới root. CLI in cảnh báo một dòng khi bật.
 
 ## Risk Assessment
 
