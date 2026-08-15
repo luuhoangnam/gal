@@ -3,7 +3,7 @@ phase: 5
 title: "Virtualized grid"
 status: pending
 priority: P1
-effort: "5d"
+effort: "4d"
 dependencies: [2, 3]
 ---
 
@@ -28,7 +28,7 @@ vứt bỏ thành code production, và sửa lỗi trôi scroll spike đã tìm 
 - 60fps khi cuộn **và sau khi đã cuộn qua 10.000 ảnh**, DOM <2000 node
 - Không rò rỉ phía JS, không crash tab. **Không có ngưỡng RAM cứng** — đã chốt bỏ, xem `plan.md`
 - Trôi scroll tích luỹ <10px ở giữa thư viện suốt pha B
-- Chạy được trên WebKit/Safari, không chỉ Chromium
+- Mục tiêu v1 là **Chrome**; Safari không cam kết perf nhưng không được crash
 
 ## Architecture
 
@@ -88,17 +88,24 @@ thiếu hỗ trợ.
 
 Item chưa biết tỉ lệ → dùng 1:1 tạm (đây là lý do phải neo scroll cho tử tế).
 
-### Safari không có `requestIdleCallback` — lỗi chết app
+### Nhắm Chrome — nhưng vẫn giữ shim 3 dòng
 
-Đo bằng Playwright: WebKit trả `typeof requestIdleCallback === "undefined"`, Chromium có.
-`gal` mở **browser mặc định**, trên macOS gốc là Safari → `ReferenceError` ngay trong vòng đọc
-NDJSON → lưới đứng nguyên ở placeholder, không bao giờ hiện ảnh.
+**Quyết định (validation 2026-08-15): v1 chỉ hỗ trợ Chrome.** `gal` mở Chrome trực tiếp
+(Phase 1), không mở browser mặc định. Bỏ được gánh nặng kiểm thử chéo WebKit.
 
-Dùng `scheduler.postTask` nếu có, rơi về `setTimeout(fn, 0)` — không bao giờ gọi thẳng
-`requestIdleCallback`. Các API khác phase 5-7 giả định đều **có** trong WebKit (đã đo):
-`TextDecoderStream`, `Response.body`, `img.decode()`, `content-visibility`, `contain: strict`,
-`scrollend`, `loading=lazy`. Riêng `performance.memory` **không có** → script đo RAM phải dùng
-RSS tiến trình, không dùng `performance.memory`.
+Dù vậy vẫn giữ shim, vì người dùng có thể dán URL vào Safari và 3 dòng này biến một
+`ReferenceError` chết app thành hoạt động bình thường:
+
+```js
+const yieldToMain = globalThis.scheduler?.postTask
+  ? (fn) => scheduler.postTask(fn, { priority: 'background' })
+  : (fn) => setTimeout(fn, 0);
+```
+
+Đã đo: WebKit thiếu **cả** `requestIdleCallback` **lẫn** `scheduler.postTask` — không gọi thẳng
+cái nào. Không cam kết 60fps trên WebKit ở v1, nhưng cũng không để nó vỡ ngay từ dòng đầu.
+
+`performance.memory` không có trong WebKit → script đo dùng RSS tiến trình cho mọi engine.
 
 ### RAM: ngân sách 500MB không đạt được bằng kiến trúc này — đã đo, không phải suy đoán
 
@@ -149,8 +156,8 @@ sai vì không phải node quyết định, và sai vì số thật lớn hơn n
 3. **Neo scroll theo id cố định** — không lặp lại lỗi của spike. Viết test hồi quy đo trôi
    tích luỹ ở 50% thư viện, ngưỡng <10px.
 4. Ingest NDJSON: `fetch` + `ReadableStream` + `TextDecoderStream`, parse theo dòng,
-   áp patch theo lô 500-1000 qua `scheduler.postTask` với fallback `setTimeout(fn,0)`.
-   **Không gọi `requestIdleCallback`** — WebKit không có (đã đo), sẽ ném `ReferenceError`.
+   áp patch theo lô 500-1000 qua shim `yieldToMain` (xem Architecture).
+   **Không gọi thẳng `requestIdleCallback` hay `scheduler.postTask`** — WebKit không có cả hai (đã đo).
 5. Thumbnail: `<img loading="lazy" decoding="async">`, gỡ `src` khi ra khỏi overscan xa.
 6. Fade-in stagger 15ms tối đa 8 ô; tôn trọng `prefers-reduced-motion`.
 7. Báo viewport về server (`/api/priority`) khi scroll dừng 150ms.
@@ -159,7 +166,7 @@ sai vì không phải node quyết định, và sai vì số thật lớn hơn n
 
 - [ ] 70k item: cuộn 60fps trở lên, p95 frame time <16,7ms (đo bằng Playwright như spike)
 - [ ] DOM node <2000 tại mọi thời điểm
-- [ ] **Chạy được trên Safari** (browser mặc định macOS) — không `requestIdleCallback` trần
+- [ ] Chrome: toàn bộ tiêu chí perf đạt. Safari: mở được, không `ReferenceError` (không đo fps)
 - [ ] **60fps sau khi đã cuộn qua 10.000 ảnh** (đo bằng RSS tiến trình + frame time, JPEG thật —
       không đo lúc vừa mở, và không dùng `performance.memory` vì WebKit không có)
 - [ ] Không rò rỉ phía JS: sau khi cuộn qua 10k ảnh rồi lọc còn 100, RAM phải nhả đáng kể

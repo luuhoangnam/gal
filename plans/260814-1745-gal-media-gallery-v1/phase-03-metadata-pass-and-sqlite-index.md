@@ -3,7 +3,7 @@ phase: 3
 title: "Metadata pass + SQLite index"
 status: pending
 priority: P1
-effort: "4d"
+effort: "2d"
 dependencies: [2]
 ---
 
@@ -14,7 +14,11 @@ dependencies: [2]
 Pha B: đọc kích thước và **ngày chụp thật** của từng file, stream patch về client trong khi grid
 đã hiển thị. Lưu index vào SQLite để lần mở sau tức thì.
 
-Đây là phase kỹ thuật khó nhất ở backend, và là nơi research đã bác bỏ hai giả định phổ biến.
+Nơi research đã bác bỏ hai giả định phổ biến (`exifr` hỏng với HEIC, shortcut thumbnail nhúng
+không đáng làm).
+
+**Phạm vi v1:** ảnh đi đường thuần JS (`exifreader` + `image-size`), video đi ffprobe.
+Box-walker tự viết đã hoãn sang sau v1 — đặc tả giữ trong file này để không phải nghiên cứu lại.
 
 ## Requirements
 
@@ -46,10 +50,20 @@ Không có hằng số cố định cho mọi file — retry rẻ vì đọc t�
 Dimension: `image-size` v2 (đo thật: HEIC 0,3-0,4ms kể cả file 228 tile, JPEG 0,12ms).
 Nó đọc `ispe` box nên không bị ảnh hưởng bởi số tile — khác hẳn ffprobe.
 
-### Video — tự viết box-walker, **không** ffprobe
+### Video — v1 dùng ffprobe, box-walker hoãn sang sau
 
-ffprobe tốn ~25ms mỗi lần spawn (đo thật, 10 lần liên tiếp). 70k file = **29 phút tuần tự**.
-Chi phí nằm ở spawn process, không ở việc đọc file.
+**Quyết định (validation 2026-08-15):** v1 dùng ffprobe **chỉ cho video**. Box-walker tự viết
+hoãn lại thành việc sau v1.
+
+Lý do: video chỉ chiếm ~9% mẫu → 6.300 file × 25ms ≈ **2,6 phút**, chấp nhận được, và có app
+chạy được sớm hơn nhiều. Khi thay bằng box-walker sau này sẽ có dữ liệu ffprobe thật để đối
+chiếu đúng/sai — viết parser nhị phân mà không có nguồn tham chiếu là cách chắc chắn để sai âm thầm.
+
+Ràng buộc giữ nguyên: **ffprobe không bao giờ được dùng cho ảnh.** 70k file × 25ms = 29 phút
+tuần tự; chi phí nằm ở spawn process. Ảnh đi đường `exifreader` + `image-size` thuần JS.
+
+Toàn bộ phần dưới đây (đường đi box, hardening, fuzz test) là đặc tả cho **bản thay thế sau v1**,
+giữ lại để không phải nghiên cứu lại. Không nằm trong phạm vi v1.
 
 `.mov` iPhone đặt `moov` ở **cuối file** (đo thật: offset 2.981.647 trên file 2,99MB) — nên
 "đọc N KB đầu" không dùng được. Phải quét top-level box: đọc 8-16 byte header, `seek` qua
@@ -140,16 +154,17 @@ cho v1 vì walk chỉ tốn <1s.
 
 ## Related Code Files
 
-- Create: `src/metadata.js` (điều phối), `src/exif-image.js`, `src/box-walker.js`, `src/index-db.js`
+- Create: `src/metadata.js` (điều phối), `src/exif-image.js`, `src/video-meta.js` (ffprobe), `src/index-db.js`
 - Modify: `src/server.js` (pha B stream tiếp trên `/api/scan`)
-- Create: `test/box-walker.test.js`, `test/exif-image.test.js`, `test/index-db.test.js`
+- Create: `test/exif-image.test.js`, `test/video-meta.test.js`, `test/index-db.test.js`
 - Create: `scripts/bench-metadata.js` (đo throughput trên mẫu 1000 file thật)
+- Sau v1, không thuộc phase này: `src/box-walker.js` + `test/box-walker.test.js` (fuzz)
 
 ## Implementation Steps
 
-1. **Viết `box-walker.js` trước và benchmark ngay** — đây là phần chưa ai đo, đừng để cuối.
-   Parse: `ftyp`, quét top-level tìm `moov`, đọc `mvhd` (version 0/1 khác độ rộng field),
-   duyệt `trak` lấy `tkhd` (matrix + width/height fixed-point 16.16).
+1. `video-meta.js`: gọi `ffprobe -v quiet -print_format json -show_streams -show_format`,
+   lấy width/height (kèm `side_data` rotation cho video quay dọc), `creation_time`, `duration`.
+   Pool đồng thời `os.cpus().length` để 6.300 video xong trong ~1 phút thay vì 2,6.
 2. `exif-image.js`: `readChunk(path, 0, 65536)` → `ExifReader.load` → thiếu thì thử 131072.
    Kết hợp `image-size` cho dims. Áp orientation vào tỉ lệ (orientation 5-8 đảo w/h).
 3. `index-db.js`: schema trên, prepared statement, insert theo transaction lô 1000.
@@ -160,9 +175,9 @@ cho v1 vì walk chỉ tốn <1s.
 
 ## Success Criteria
 
-- [ ] `box-walker` lấy đúng width/height/creation_time/duration từ `.mov` iPhone gốc và `.mp4` faststart
-- [ ] Video quay dọc hiển thị đúng tỉ lệ (matrix `tkhd` được áp)
-- [ ] Thời gian ISO-BMFF quy đổi đúng (kiểm bằng file có ngày biết trước)
+- [ ] ffprobe lấy đúng width/height/creation_time/duration từ `.mov` iPhone gốc và `.mp4`
+- [ ] Video quay dọc hiển thị đúng tỉ lệ (đọc rotation từ `side_data` của ffprobe)
+- [ ] 6.300 video (~9% của 70k) xong trong <3 phút với pool đồng thời
 - [ ] HEIC iPhone lấy được `DateTimeOriginal` (chứng minh exifreader hoạt động ở chỗ exifr hỏng)
 - [ ] Ảnh có orientation 6 → tỉ lệ đảo đúng
 - [ ] Benchmark 1000 file thật: ghi lại throughput, ngoại suy 70k, **so với ngân sách 3 phút**
@@ -173,17 +188,15 @@ cho v1 vì walk chỉ tốn <1s.
 - [ ] Xoá file rồi mở lại → biến khỏi grid (cột `seen`), id các file khác không dịch
 - [ ] Chạy hai tiến trình `gal` cùng root → tiến trình thứ hai không crash, vào chế độ chỉ đọc
 - [ ] Tải lại trang giữa lúc scan → không sinh walker thứ hai (một scan mỗi root)
-- [ ] Fuzz test box-walker: 1000 file méo ngẫu nhiên → không treo, không lỗi chưa bắt, không OOM
-- [ ] File `.mp4` thực chất là text/JPEG → parser từ chối sạch, không crash
+- [ ] File `.mp4` hỏng / thực chất là text → ffprobe fail sạch, item vẫn vào index với metadata rỗng, pipeline không dừng
 
 ## Risk Assessment
 
-**Rủi ro cao nhất: box-walker chưa từng được viết và đo.** Research chỉ xác nhận vị trí `moov`.
-Parse `stsd`/`tkhd` có nhiều biến thể (version 0/1, matrix xoay, track không phải video).
-*Tín hiệu:* video sai tỉ lệ, sai ngày, hoặc ném lỗi trên file thật.
-*Phản ứng:* nếu box-walker tốn hơn 1 ngày, tạm dùng ffprobe **chỉ cho video** (video là thiểu số
-— 9% mẫu, 70k×9% = 6300 file × 25ms ≈ 2,6 phút, chấp nhận được tạm thời) rồi thay sau.
-Đây là fallback đã tính trước, không phải sửa vội.
+**Rủi ro: ffprobe chậm hơn ước tính trên thư viện nhiều video.** Ước tính 2,6 phút dựa trên
+giả định video chiếm 9%; thư mục toàn video thì con số khác hẳn.
+*Tín hiệu:* pha B trên thư mục video vượt 5 phút.
+*Phản ứng:* ưu tiên metadata theo viewport (kiến trúc stream đã sẵn sàng), và đẩy nhanh việc
+thay bằng box-walker — đặc tả đã có sẵn trong phase này.
 
 **Rủi ro: ngưỡng 128KB cho HEIC dựa trên 1 file mẫu.**
 *Tín hiệu:* nhiều ảnh rơi về `date_src=mtime` dù là ảnh máy ảnh.

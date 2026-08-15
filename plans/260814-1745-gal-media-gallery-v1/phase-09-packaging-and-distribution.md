@@ -81,6 +81,12 @@ phân phối này, và vẫn rẻ hơn mọi lựa chọn có bước cài đặ
 5. README: một dòng lệnh, ảnh chụp lưới và lightbox, bảng phím tắt, mục xử lý sự cố.
 6. Chọn license (MIT là mặc định hợp lý; lưu ý `exifreader` là MPL-2.0 — copyleft cấp file,
    dùng làm dependency không sửa đổi thì không lan sang code của mình).
+7. README nêu rõ **v1 nhắm Chrome** và cần ffmpeg hệ thống — hai ràng buộc này phải nằm ở phần
+   đầu, không giấu trong mục xử lý sự cố.
+
+**Test (chốt ở validation 2026-08-15):** `node:test` builtin cho unit, Playwright cho các tiêu chí
+đo được (60fps, trôi scroll, RAM, a11y). Không thêm test framework. **Không dựng CI** ở v1 —
+repo chưa có remote, và số đo perf trên CI runner không đáng tin cho tiêu chí 60fps.
 
 ## Success Criteria
 

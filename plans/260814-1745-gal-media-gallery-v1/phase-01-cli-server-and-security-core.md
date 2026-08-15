@@ -90,13 +90,17 @@ Không crash, không log, chỉ chậm — loại bug dễ ship mà không ai th
 4. `src/server.js`: `http.createServer`, middleware guard Host đầu tiên, rồi router.
    `server.listen(0, '127.0.0.1')` lấy port thật từ `server.address().port`.
 5. `src/cli.js`: parse argv (không thêm thư viện — `process.argv.slice(2)` là đủ),
-   resolve root, start server, mở browser bằng `open` của macOS (`child_process.spawn('open', [url])`),
-   in URL ra stdout để user tự mở nếu cần.
+   resolve root, start server, **mở Chrome cụ thể**:
+   `spawn('open', ['-a', 'Google Chrome', url])`. Không dùng `open <url>` trần vì nó mở browser
+   mặc định — trên macOS gốc là Safari, ngoài phạm vi hỗ trợ v1 (validation 2026-08-15).
+   Không có Chrome → in URL kèm ghi chú "v1 nhắm Chrome", vẫn khởi động server chứ không thoát.
+   Luôn in URL ra stdout để user tự mở nếu cần.
 6. Test bằng `node:test` builtin, không thêm test framework.
 
 ## Success Criteria
 
-- [ ] `gal <thư mục>` mở browser tới trang trắng có tiêu đề, in URL ra terminal
+- [ ] `gal <thư mục>` mở **Chrome** tới trang có tiêu đề, in URL ra terminal
+- [ ] Máy không có Chrome → vẫn khởi động server, in URL + ghi chú, không thoát lỗi
 - [ ] `gal /không/tồn/tại` → thông báo lỗi rõ, exit 1
 - [ ] `curl -H 'Host: evil.com' <url>` → 403
 - [ ] `curl -H 'Origin: https://evil.com' <url>/api/thumb/...` → 403

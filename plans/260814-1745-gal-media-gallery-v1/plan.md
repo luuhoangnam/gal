@@ -3,7 +3,7 @@ title: "Gal media gallery v1"
 description: "Một lệnh `gal <path>` mở gallery web hiển thị đệ quy toàn bộ ảnh/video, chất lượng Google Photos, Node thuần zero-native-dep"
 status: pending
 priority: P1
-effort: "~24 ngày"
+effort: "20.5d"
 tags: [cli, media, gallery, nodejs, frontend]
 created: 2026-08-14
 blockedBy: []
@@ -57,8 +57,10 @@ Frontend: JS thuần, không framework. Virtualizer tự viết (spike đã ch�
 |---|---|
 | Node thuần, zero native dep | Quyết định của chủ dự án; research indexing chứng minh khả thi |
 | **Không** dùng `justified-layout` | Bảo trì lần cuối 2022-06-19 (`npm view`); spike tự viết 15 dòng đạt 120fps |
-| `exifreader`, **không** `exifr` | exifr hard-code `ftyp>50` → hỏng với mọi HEIC iPhone hiện đại (issue #138 + đọc source) |
-| Tự viết ISO-BMFF box-walker cho video | ffprobe 25ms/spawn × 70k = 29 phút; `.mov` iPhone có `moov` ở **cuối** file |
+| `exifreader`, **không** `exifr` | exifr hard-code `ftyp>50` → hỏng với mọi HEIC iPhone hiện đại (issue #138 + đọc source). exifreader đã tự đo trên 3 HEIC thật: ngày + dims + orientation đúng, 1-16ms |
+| ffprobe **chỉ cho video**, không bao giờ cho ảnh | ffprobe 25ms/spawn × 70k ảnh = 29 phút; video chỉ 9% nên 2,6 phút là chấp nhận được |
+| Box-walker tự viết: **hoãn sau v1** | Quyết định validation — có app chạy sớm hơn, và sau này có dữ liệu ffprobe làm nguồn đối chiếu |
+| v1 nhắm **Chrome**, mở Chrome trực tiếp | Quyết định validation — bỏ gánh kiểm thử WebKit; vẫn giữ shim 3 dòng để Safari không crash |
 | Thumbnail JPEG qua ffmpeg | ffmpeg 9 homebrew **không có** libwebp; AVIF chậm hơn 1,6× |
 | **Bỏ** shortcut thumbnail nhúng | Đo thật: 39ms so với 32ms decode thẳng — phức tạp hơn, không nhanh hơn |
 | `node:sqlite` | Đo thật: 70k insert 31ms, query khoảng ngày có index 1ms |
@@ -71,7 +73,7 @@ Frontend: JS thuần, không framework. Virtualizer tự viết (spike đã ch�
 | `mtime = Math.floor(mtimeMs)` một chỗ duy nhất | Đo thật `mtimeMs` = `…984.1538`, là số thực |
 | SQLite WAL + `busy_timeout` | Đo thật: mặc định `delete`, writer thứ hai ném `ERR_SQLITE_ERROR` ngay |
 | Neo scroll theo **id cố định**, không theo chỉ số | Spike đo trôi 187px; và pha B đổi thứ tự sắp xếp nên chỉ số trỏ sang item khác |
-| `scheduler.postTask`, **không** `requestIdleCallback` | Đo Playwright: WebKit không có → `ReferenceError` chết app trên Safari |
+| Shim `yieldToMain`, không gọi thẳng `requestIdleCallback` **hay** `scheduler.postTask` | Đo Playwright: WebKit thiếu **cả hai** → `ReferenceError` chết app trên Safari |
 | Pool DOM gắn theo id, không theo chỉ số | Pool theo chỉ số làm sai `alt`, nhảy focus, lightbox trả focus nhầm ô |
 | ARIA `list`, **không** `grid` | `grid` giả định số ô mỗi hàng đều nhau; justified thì không |
 | Virtualizer tự viết | react-window rò DOM node (#433/#800); TanStack stutter (#832) |
@@ -98,7 +100,7 @@ Phase 4 chạy song song được với 5 (khác file, khác tầng).
 Trích từ contract, tất cả đều đo được:
 
 - [ ] `gal ~/Pictures` trên máy sạch → ảnh đầu tiên <1s, không có wizard/form/settings
-- [ ] Chạy đúng trên **Safari** (browser mặc định macOS), không chỉ Chrome
+- [ ] Chrome: toàn bộ tiêu chí perf đạt. Safari: mở được, không crash (không cam kết perf ở v1)
 - [ ] 70k file: scroll 60fps, DOM <2000 node **với thumbnail JPEG thật**
 - [ ] Giữ 60fps **sau khi đã cuộn qua 10.000 ảnh**, không chỉ lúc vừa mở
 - [ ] Không rò rỉ JS: cuộn 10k ảnh rồi lọc còn 100 → RAM nhả đáng kể
@@ -117,12 +119,20 @@ Trích từ contract, tất cả đều đo được:
 
 ## Rủi ro lớn nhất
 
-1. **Box-walker video chưa từng được viết và đo** — research chỉ xác nhận vị trí `moov`,
-   chưa parse `mvhd`/`tkhd`. Là parser nhị phân chạy trên 70k file không tin cậy → cần fuzz test.
-2. **Ngưỡng đọc 128KB cho HEIC EXIF dựa trên 1 file mẫu** — cần test trên vài chục file đa dạng.
-3. **Tự viết windowing thiếu phần "chán"** — scroll restoration, focus, tỉ lệ dị thường.
+1. **Tự viết windowing thiếu phần "chán"** — scroll restoration, focus, tỉ lệ dị thường.
+   Không thư viện nào đỡ, và đây là phần dễ bị đánh giá thấp nhất.
+2. **Ngưỡng đọc 128KB cho HEIC EXIF** — đã tự đo đúng trên 3 file thật, nhưng cần thêm mẫu
+   từ nguồn khác iPhone (ảnh đã edit qua app khác có cấu trúc box khác).
+3. **ffprobe trên thư viện nhiều video** — ước tính 2,6 phút giả định video chiếm 9%.
 
-Rủi ro RAM đã chuyển từ "chưa biết" sang "đã đo, cần quyết định" — xem mục dưới.
+Hai rủi ro đã được gỡ bằng quyết định: box-walker (hoãn sau v1) và RAM (bỏ ngưỡng cứng).
+
+## Việc sau v1
+
+- Thay ffprobe bằng box-walker ISO-BMFF tự viết (đặc tả + yêu cầu hardening/fuzz đã có sẵn
+  trong `phase-03`). Chỉ làm khi pha B video thực sự thành nút thắt.
+- Hỗ trợ Safari đầy đủ (hiện chỉ đảm bảo không crash).
+- Dark mode.
 
 ## Quyết định cần chủ dự án
 
@@ -167,5 +177,47 @@ Phương án thay thế: tự tải bản LGPL decode-only lần chạy đầu (
 Chọn cách đơn giản vì không phụ thuộc mạng, không có câu hỏi license khi phát hành, ít code hơn.
 Đánh đổi: người chưa có ffmpeg phải cài một lần — vi phạm nhẹ lời hứa "không ceremony".
 Đảo quyết định chỉ tốn công ở Phase 9, không ảnh hưởng phase khác.
+
+## Validation Log
+
+### Phiên 1 — 2026-08-15
+
+**Verification Results**
+- Claims kiểm tra: 8 (dependency + API của browser, chạy thật chứ không đọc docs)
+- Verified: 7 | Failed: 1 | Unverified: 0 | Tier: Full (9 phase)
+- Failed: `scheduler.postTask` — plan ghi là API chính thay cho `requestIdleCallback`, nhưng đo
+  Playwright cho thấy **WebKit thiếu cả hai**. Đã sửa thành shim `yieldToMain`.
+- Verified nổi bật (tự đo, không tin research suông):
+  - `exifreader` đọc HEIC thật: 3 file Photos Library, ngày 2020/2025/2026 đúng, dims đúng,
+    bắt được `orientation: 6`, 1-16ms/file, buffer 128KB đủ.
+  - `photoswipe@5.4.4` có `msrc` (xác nhận trong dist) → dùng làm cách chính chống chớp trắng.
+  - `node:sqlite`: 70k insert 31ms, query có index 1ms.
+  - `mtimeMs` là số thực; dải cổng ephemeral macOS 16384; SQLite mặc định `delete` chặn writer thứ hai.
+
+**Quyết định đã chốt**
+
+| # | Câu hỏi | Chọn | Ảnh hưởng |
+|---|---|---|---|
+| 1 | Ngân sách RAM | Bỏ ngưỡng cứng 500MB, thay bằng tiêu chí không-rò-rỉ | Phase 5; contract gốc đã ghi đính chính |
+| 2 | Phạm vi browser | **Chỉ Chrome**, mở Chrome trực tiếp | Phase 1, 5, 8; giảm 1 ngày |
+| 3 | Metadata video | **ffprobe trước**, box-walker hoãn sau v1 | Phase 3: 4d → 2d |
+| 4 | `.photoslibrary` | Bỏ qua, empty state nói rõ | Phase 2, 8 (đã đúng sẵn) |
+| 5 | Test | `node:test` + Playwright, **không CI** | Phase 9 |
+
+**Ảnh hưởng effort:** ~24 ngày → **20,5 ngày** (tổng từ frontmatter 9 phase).
+
+### Whole-Plan Consistency Sweep
+
+Chạy trên toàn bộ `plan.md` + 9 `phase-*.md` sau khi propagate.
+
+- Rà thuật ngữ cũ: `browser mặc định`, `box-walker` như việc v1, `RAM <500MB`,
+  `requestIdleCallback`/`scheduler.postTask` gọi trần, `src/box-walker.js` trong file list v1.
+- **Mâu thuẫn chưa giải quyết: 0.** Hai kết quả còn khớp mẫu tìm kiếm đều là văn bản đính chính
+  có chủ đích (giải thích vì sao bỏ browser mặc định) và chính đoạn code shim.
+- Đã đồng bộ: bảng quyết định `plan.md`, success criteria, `Related Code Files` của phase 3,
+  effort frontmatter của cả 9 phase, và ghi chú đính chính trong contract gốc.
+
+Lịch sử ghi lại nguyên vẹn ở `plans/reports/` — hai report red-team và các report research
+giữ nguyên nội dung gốc kể cả những chỗ về sau bị bác bỏ, vì chúng là hồ sơ trạng thái tại thời điểm.
 
 <!-- slug: gal-media-gallery-v1 -->
