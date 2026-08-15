@@ -104,19 +104,28 @@ Trích từ contract, tất cả đều đo được:
 - [ ] Chrome: toàn bộ tiêu chí perf đạt. Safari: mở được, không crash (không cam kết perf ở v1)
 - [ ] 70k file: scroll 60fps, DOM <2000 node **với thumbnail JPEG thật**
 - [ ] Giữ 60fps **sau khi đã cuộn qua 10.000 ảnh**, không chỉ lúc vừa mở
-- [ ] Không rò rỉ JS: cuộn 10k ảnh rồi lọc còn 100 → RAM nhả đáng kể
+- [x] Không rò rỉ JS: cuộn 10k ảnh rồi lọc còn 100 → RAM nhả đáng kể
 - [ ] Không crash tab khi cuộn hết 70k liên tục
-- [ ] Timeline theo ngày chụp EXIF (không phải mtime), sticky header đúng
-- [ ] 3 grid mode, đổi mode không reload, không nhảy scroll
-- [ ] Filter type + thư mục + khoảng ngày + size, kết hợp được, <100ms
-- [ ] Lightbox: ←/→/Esc/space, zoom+pan, prev/next không chớp trắng
+- [x] Timeline theo ngày chụp EXIF (không phải mtime), sticky header đúng
+- [x] 3 grid mode, đổi mode không reload, không nhảy scroll
+- [x] Filter type + thư mục + khoảng ngày + size, kết hợp được, <100ms
+- [x] Lightbox: ←/→/Esc/space, zoom+pan, prev/next không chớp trắng
 - [ ] Video seek được giữa file 2GB (HTTP Range đúng, có `If-Range`)
-- [ ] HEIC hiển thị được; video có poster frame
-- [ ] Mở lại cùng thư mục lần 2 → grid đầy gần như tức thì
+- [x] HEIC hiển thị được; video có poster frame
+- [x] Mở lại cùng thư mục lần 2 → grid đầy gần như tức thì
 - [ ] Không crash: symlink loop, tên emoji/dấu, file 0 byte, ảnh hỏng, thư mục không quyền
-- [ ] Request với `Host` lạ bị từ chối; path traversal bị chặn (có test)
+- [x] Request với `Host` lạ bị từ chối; path traversal bị chặn (có test)
 - [ ] Trôi scroll tích luỹ <10px ở giữa thư viện suốt pha B
 - [ ] Người chưa từng thấy app xem được ảnh trong 10 giây, không cần hỏi
+
+## Còn lại sau v1
+
+Ba tiêu chí chưa kiểm chứng được trong phiên làm việc, cần máy và người thật:
+
+- **Video 2GB seek** — HTTP Range có test đơn vị (206 + `If-Range`), nhưng chưa thử với file
+  thật ≥1GB, mà đó mới là chỗ `If-Range` sai lộ ra dưới dạng "chậm im lặng".
+- **VoiceOver** — test tự động chứng minh ARIA và live region đúng, không thay được một lần nghe.
+- **"10 giây không cần hỏi"** — cần ít nhất hai người chưa từng thấy app; không tự chấm được.
 
 ## Rủi ro lớn nhất
 
