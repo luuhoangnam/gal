@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>gal</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bar">
+      <div class="path"><b>gal</b><span id="sub">— đang quét…</span></div>
+      <div class="spacer"></div>
+      <span class="count" id="cnt"></span>
+      <div class="seg" role="group" aria-label="Kiểu lưới">
+        <button data-mode="justified" aria-pressed="true">Justified</button>
+        <button data-mode="square" aria-pressed="false">Ô vuông</button>
+        <button data-mode="masonry" aria-pressed="false">Masonry</button>
+      </div>
+      <button class="icobtn" id="minus" aria-label="Giảm mật độ" title="Nhỏ hơn (-)">−</button>
+      <button class="icobtn" id="plus" aria-label="Tăng mật độ" title="Lớn hơn (+)">+</button>
+    </div>
+
+    <div class="scan" id="scan" style="width: 0"></div>
+    <div class="stickhdr" id="stick" aria-hidden="true"></div>
+
+    <div id="scroller" tabindex="0">
+      <div id="sizer" role="list" aria-label="Ảnh và video"></div>
+      <div class="empty" id="empty">
+        <div>
+          <b>Không tìm thấy ảnh hay video nào</b>
+          Thư mục này và mọi thư mục con đều trống.
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

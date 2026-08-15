@@ -67,6 +67,7 @@ Frontend: JS thuần, không framework. Virtualizer tự viết (spike đã ch�
 | NDJSON + `ReadableStream` | Backpressure native; SSE không có, WebSocket thừa |
 | Host **+ Origin/Sec-Fetch-Site** validation | Host một mình không chặn `<img src>` cross-origin (red team) |
 | `realpath` containment, không so chuỗi | Deno CVE-2026-49401; APFS case-insensitive |
+| `--lan` opt-in bind `0.0.0.0`, mặc định vẫn loopback | Yêu cầu chủ dự án 2026-08-15. Host guard nới bằng allowlist địa chỉ thật của máy, không phải chấp nhận mọi Host — nới hết là mở lại lỗ DNS rebinding. Không có xác thực trong LAN: ai biết URL đều xem được |
 | `/api/file` allowlist đuôi + `nosniff` | File `.html` trong thư mục ảnh = script same-origin đọc mọi file |
 | Id = rowid SQLite gắn `rel`, không phải thứ tự phát hiện | Thứ tự phát hiện dịch khi thêm/xoá file → trả nhầm ảnh |
 | URL thumbnail chứa hash nội dung | Dải ephemeral macOS 16384 cổng (đo `sysctl`) → trùng cổng lẫn cache giữa các root |
@@ -83,11 +84,11 @@ Frontend: JS thuần, không framework. Virtualizer tự viết (spike đã ch�
 
 | # | Phase | Status | Phụ thuộc |
 |---|-------|--------|-----------|
-| 1 | [CLI, server, security core](./phase-01-cli-server-and-security-core.md) | Pending | — |
-| 2 | [Walker đệ quy + NDJSON stream](./phase-02-recursive-walker-and-ndjson-stream.md) | Pending | 1 |
-| 3 | [Metadata pass + SQLite index](./phase-03-metadata-pass-and-sqlite-index.md) | Pending | 2 |
-| 4 | [Thumbnail pipeline](./phase-04-thumbnail-pipeline.md) | Pending | 1, 3 |
-| 5 | [Virtualized grid](./phase-05-virtualized-grid.md) | Pending | 2, 3 |
+| 1 | [CLI, server, security core](./phase-01-cli-server-and-security-core.md) | Completed | — |
+| 2 | [Walker đệ quy + NDJSON stream](./phase-02-recursive-walker-and-ndjson-stream.md) | Completed | 1 |
+| 3 | [Metadata pass + SQLite index](./phase-03-metadata-pass-and-sqlite-index.md) | Completed | 2 |
+| 4 | [Thumbnail pipeline](./phase-04-thumbnail-pipeline.md) | Completed | 1, 3 |
+| 5 | [Virtualized grid](./phase-05-virtualized-grid.md) | Completed | 2, 3 |
 | 6 | [Lightbox + video](./phase-06-lightbox-and-video.md) | Pending | 1, 5 |
 | 7 | [Filter, sort, group, điều hướng](./phase-07-filter-sort-group-and-navigation.md) | Pending | 5 |
 | 8 | [Trạng thái, a11y, polish](./phase-08-states-accessibility-and-polish.md) | Pending | 5, 6, 7 |

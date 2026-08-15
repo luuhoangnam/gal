@@ -87,6 +87,9 @@ Phím tắt tồn tại nhưng **không bắt buộc** — mọi chức năng đ
 
 ## Success Criteria
 
+- [ ] Không rò rỉ phía JS (chuyển từ Phase 5 — cần bộ lọc mới dựng được tình huống):
+      cuộn qua 10.000 ảnh rồi lọc còn 100 → RSS phải nhả đáng kể
+
 - [ ] Lọc 70k → kết quả hiển thị <100ms (đo bằng Playwright, không phải cảm nhận)
 - [ ] Kết hợp 4 loại filter cùng lúc vẫn <100ms
 - [ ] Đổi sort trên 70k không chặn main thread quá 50ms một lần
