@@ -51,6 +51,7 @@ Not on npm yet — see [Status](#status).
 gal ~/Pictures                 # prints the URL, click it to open
 gal . --port 8080              # fixed port instead of a random free one
 gal ~/Photos --lan             # let phones and laptops on your Wi-Fi browse it
+gal ~/Pictures --watch         # re-scan automatically when files change
 gal ~/Pictures --follow-symlinks
 gal ~/Pictures --include-bundles   # also descend into .photoslibrary, .app, ...
 ```
@@ -60,6 +61,7 @@ gal ~/Pictures --include-bundles   # also descend into .photoslibrary, .app, ...
 | `--host <addr>` | `127.0.0.1` | Bind address |
 | `--port <n>` | `0` (random free) | Port |
 | `--lan` | off | Shorthand for `--host 0.0.0.0` |
+| `--watch` | off | Re-scan automatically when the folder changes |
 | `--include-bundles` | off | Descend into macOS bundle directories |
 | `--follow-symlinks` | off | Follow directory symlinks |
 

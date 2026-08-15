@@ -17,8 +17,12 @@ const BUNDLE_EXTS = new Set([
 const STAT_BATCH = 64;
 
 export function newStats() {
-  return { files: 0, dirs: 0, skippedDirs: 0, skippedBundles: 0 };
+  // `denied` giữ vài đường dẫn đầu tiên bị chặn, không giữ hết: empty state chỉ
+  // cần nêu tên cụ thể để người dùng biết cấp quyền cho cái gì.
+  return { files: 0, dirs: 0, skippedDirs: 0, skippedBundles: 0, denied: [] };
 }
+
+const DENIED_KEEP = 3;
 
 function skipDir(name, includeBundles) {
   if (name.startsWith('.') || name === 'node_modules') return 'hidden';
@@ -53,8 +57,9 @@ export async function* walk(root, opts = {}) {
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });
-    } catch {
+    } catch (err) {
       stats.skippedDirs++; // EACCES/ENOENT: bỏ qua thư mục, scan chạy tiếp
+      if (err?.code === 'EACCES' && stats.denied.length < DENIED_KEEP) stats.denied.push(dir);
       continue;
     }
     stats.dirs++;

@@ -53,6 +53,15 @@ let scheduled = false;
 let scanned = 0;
 let metaDone = 0;
 let phase = 'a';
+let busy = false;
+let pending = false;
+// Pha A là danh sách file THẬT đang có. Id nào không xuất hiện trong lượt quét
+// là file đã bị xoá/đổi tên — không có tập này thì quét lại chỉ thêm, không bớt.
+let seen = null;
+let readonly = false;
+// Từ `done_a`: đường dẫn đã quét, số bundle và thư mục bị bỏ qua. Empty state
+// không có mấy con số này thì chỉ là câu "không có ảnh" vô dụng.
+let info = { root: '', bundles: 0, skipped: 0, denied: [] };
 
 function ingest(o) {
   const i = o.i ?? o.id; // pha A phát `i`, hàng từ cache phát `id`
@@ -126,13 +135,14 @@ function updateStatus() {
   $('#cnt').textContent = `${fmtN(grid.count)} mục`;
   const bar = $('#scan');
   if (phase === 'done') {
-    bar.style.width = '100%';
+    bar.style.transform = 'scaleX(1)';
     bar.style.opacity = '0';
     $('#sub').textContent = `— ${fmtN(items.size)} mục`;
     return;
   }
   const p = phase === 'a' ? 0.5 : 0.5 + (scanned > 0 ? (metaDone / scanned) * 0.5 : 0);
-  bar.style.width = `${Math.min(99, p * 100)}%`;
+  bar.style.transform = `scaleX(${Math.min(0.99, p)})`;
+  announce(phase === 'a' ? `Đang quét, ${fmtN(items.size)} mục.` : 'Đang đọc ngày chụp.');
   $('#sub').textContent =
     phase === 'a' ? `— đang quét… ${fmtN(items.size)} mục` : '— đang đọc ngày chụp…';
 }
@@ -140,26 +150,82 @@ function updateStatus() {
 function updateEmpty() {
   const filtered = isFiltered(criteria);
   const none = grid.count === 0;
-  $('#empty').classList.toggle('on', none && phase === 'done');
+  const scanning = phase !== 'done';
+  // Chưa có ảnh nào mà vẫn đang quét → khung nhịp thở, không phải "trống rỗng"
+  $('#skel').classList.toggle('on', none && scanning && items.size === 0);
+  $('#empty').classList.toggle('on', none && !scanning);
   $('#emptytitle').textContent = filtered
     ? 'Không có mục nào khớp bộ lọc'
     : 'Không tìm thấy ảnh hay video nào';
   $('#emptysub').textContent = filtered
     ? `Đang lọc: ${describe(criteria)}`
-    : 'Thư mục này và mọi thư mục con đều trống.';
+    : `Đã quét ${info.root || 'thư mục này'} và mọi thư mục con.`;
+
+  const hint = $('#emptyhint');
+  hint.replaceChildren();
+  if (!filtered) {
+    if (info.bundles > 0) {
+      // Trên máy Mac điển hình phần lớn ảnh nằm trong .photoslibrary, bị bỏ qua
+      // mặc định — nói thẳng ra cùng lệnh để quét vào.
+      hint.append(
+        `Đã bỏ qua ${fmtN(info.bundles)} thư viện ảnh (.photoslibrary, .aplibrary…). Quét cả chúng: `,
+      );
+      hint.append(Object.assign(document.createElement('code'), { textContent: 'gal --include-bundles' }));
+    }
+    if (info.denied.length > 0) {
+      const p = document.createElement('span');
+      p.textContent =
+        `Không đọc được ${fmtN(info.skipped)} thư mục, ví dụ ${info.denied[0]}. ` +
+        'Cấp quyền ở Cài đặt hệ thống → Quyền riêng tư & Bảo mật → Toàn bộ ổ đĩa.';
+      hint.append(p);
+    }
+  }
   $('#emptyclear').hidden = !filtered;
   $('#clear').hidden = !filtered;
 }
 
+/**
+ * Tiến trình cho screen reader, tối đa 5 giây một lần. Đọc theo từng ảnh thì
+ * VoiceOver nói không dứt và người dùng không nghe được gì khác.
+ */
+let liveAt = 0;
+function announce(text, force = false) {
+  const now = Date.now();
+  if (!force && now - liveAt < 5000) return;
+  liveAt = now;
+  $('#live').textContent = text;
+}
+
 // ---------- ingest NDJSON ----------
 async function scan() {
+  // Đang quét mà có thay đổi mới: hẹn quét lại một lượt sau, không chồng hai
+  // stream lên cùng một Map
+  if (busy) {
+    pending = true;
+    return;
+  }
+  pending = false;
+  busy = true;
+  $('#refresh').disabled = true;
+  scanned = 0;
+  metaDone = 0;
+  phase = 'a';
+  seen = new Set();
+  readonly = false;
+
   let res;
   try {
     res = await fetch('/api/scan');
   } catch {
+    busy = false;
+    $('#refresh').disabled = false;
     return fail('Không kết nối được server');
   }
-  if (!res.ok) return fail('Server từ chối yêu cầu quét');
+  if (!res.ok) {
+    busy = false;
+    $('#refresh').disabled = false;
+    return fail('Server từ chối yêu cầu quét');
+  }
 
   const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
   let buf = '';
@@ -175,8 +241,13 @@ async function scan() {
     }
   }
   phase = 'done';
+  busy = false;
+  $('#refresh').disabled = false;
   rebuild();
   renderFolders();
+  announce(`Quét xong, ${fmtN(items.size)} mục.`, true);
+  demoState(); // ép lại sau khi quét xong, nếu không dữ liệu thật ghi đè lên
+  if (pending) scan();
 }
 
 function handle(msg) {
@@ -185,12 +256,21 @@ function handle(msg) {
     case 'a':
     case 'b':
       for (const o of msg.items) ingest(o);
+      if (msg.t === 'a') for (const o of msg.items) seen?.add(o.i);
       if (msg.t === 'b') metaDone += msg.items.length;
       schedule();
       break;
     case 'done_a':
       scanned = msg.n;
       phase = 'b';
+      readonly = Boolean(msg.readonly);
+      info = {
+        root: msg.root ?? '',
+        bundles: msg.bundles ?? 0,
+        skipped: msg.skipped ?? 0,
+        denied: msg.denied ?? [],
+      };
+      announce(`Đã tìm thấy ${fmtN(scanned)} mục, đang đọc ngày chụp.`, true);
       renderFolders();
       break;
     case 'done_cache':
@@ -199,12 +279,19 @@ function handle(msg) {
       break;
     case 'done_b':
       phase = 'done';
+      // Index chỉ-đọc phát id tạm (âm), không so được với id từ cache → không prune
+      if (!readonly && seen) {
+        for (const id of items.keys()) if (!seen.has(id)) items.delete(id);
+        schedule();
+      }
       break;
   }
 }
 
 function fail(text) {
   phase = 'done';
+  busy = false;
+  pending = false;
   $('#sub').textContent = `— ${text}`;
   $('#scan').style.opacity = '0';
 }
@@ -325,6 +412,30 @@ goto_.onchange = () => {
   if (i >= 0) grid.focusIndex(i);
 };
 
+$('#refresh').onclick = () => scan();
+
+/**
+ * `--watch`: server giữ kết nối tới khi thư mục đổi rồi mới trả `rev` mới.
+ * 204 nghĩa là server không bật watch — dừng hỏi, nút ↻ vẫn dùng được.
+ */
+async function watchLoop() {
+  let rev = 0;
+  for (;;) {
+    let res;
+    try {
+      res = await fetch(`/api/watch?rev=${rev}`);
+    } catch {
+      return; // server tắt hoặc mất mạng: thôi, không quay vòng vô ích
+    }
+    if (res.status !== 200) return;
+    const { rev: next } = await res.json();
+    if (next > rev) {
+      rev = next;
+      await scan();
+    }
+  }
+}
+
 bindKeyboard({
   grid,
   lightbox: () => lightbox,
@@ -336,6 +447,7 @@ bindKeyboard({
     isFiltered: () => isFiltered(criteria),
     clearFilters,
     focusFilter: () => $('#q').focus(),
+    refresh: () => scan(),
     jumpToDate: () => (goto_.showPicker ? goto_.showPicker() : goto_.focus()),
   },
 });
@@ -346,7 +458,35 @@ addEventListener('hashchange', () => {
   rebuild();
 });
 
+/**
+ * `?state=` để xem từng trạng thái mà không phải dựng thư mục giả cho mỗi cái.
+ * Chỉ ép phần hiển thị, không đụng dữ liệu.
+ */
+function demoState() {
+  const want = new URLSearchParams(location.search).get('state');
+  if (!want) return;
+  if (want === 'scanning') {
+    phase = 'a';
+    items.clear();
+    rebuild();
+  } else if (want === 'bundles' || want === 'denied' || want === 'empty') {
+    phase = 'done';
+    info = {
+      root: info.root || '/Users/ai-do/Pictures',
+      bundles: want === 'bundles' ? 3 : 0,
+      skipped: want === 'denied' ? 12 : 0,
+      denied: want === 'denied' ? ['/Users/ai-do/Pictures/Ảnh riêng'] : [],
+    };
+    items.clear();
+    rebuild();
+  } else if (want === 'filter') {
+    setCriteria({ q: 'không-khớp-gì-cả' });
+  }
+}
+demoState();
+
 syncControls();
 setTarget(0);
 window.__gal = { grid, items, get criteria() { return criteria; }, setCriteria, applyFilters };
 scan();
+watchLoop();

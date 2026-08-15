@@ -1,7 +1,7 @@
 ---
 phase: 8
 title: "Trạng thái, a11y, polish"
-status: pending
+status: completed
 priority: P1
 effort: "2.5d"
 dependencies: [5, 6, 7]
@@ -65,9 +65,12 @@ thumbnail (làm vỡ lưới justified — dùng đổi độ sáng).
 
 ## Related Code Files
 
-- Create: `web/states.js` (thành phần cho 9 trạng thái), `web/a11y.js` (quản lý focus lưới)
-- Modify: `web/grid.js`, `web/styles.css`, `web/app.js`
-- Create: `test/a11y.spec.js` (Playwright: tab order, focus trap, aria)
+- Modify: `web/grid.js` (roving tabindex, giữ ô focus trong DOM, aria-posinset, ô hỏng)
+- Modify: `web/app.js`, `web/index.html`, `web/styles.css` (9 trạng thái, live region, `?state=`)
+- Modify: `src/walk.js`, `src/scan.js` (báo root + thư mục bị từ chối cho empty state)
+- Modify: `src/server.js` (thumbnail hỏng trả 404 thay vì redirect)
+- Create: `test/a11y.test.js` (grep tĩnh + Chrome thật, chạy trong `npm test`)
+- **Không tạo**: `web/states.js`, `web/a11y.js` (xem Kết quả thực tế)
 
 ## Implementation Steps
 
@@ -81,17 +84,45 @@ thumbnail (làm vỡ lưới justified — dùng đổi độ sáng).
 
 ## Success Criteria
 
-- [ ] Đủ 9 trạng thái, mỗi trạng thái kích hoạt và xem được
-- [ ] Empty state của `~/Pictures` nêu rõ số bundle đã bỏ qua và cách quét vào
-- [ ] Tab qua lưới: focus luôn nhìn thấy, không rơi về `body` khi ô bị ảo hoá
-- [ ] Lightbox: focus trap đúng, `Esc` trả focus về thumbnail nguồn
+- [x] Đủ 9 trạng thái, mỗi trạng thái kích hoạt và xem được
+- [x] Empty state của `~/Pictures` nêu rõ số bundle đã bỏ qua và cách quét vào
+- [x] Tab qua lưới: focus luôn nhìn thấy, không rơi về `body` khi ô bị ảo hoá
+- [x] Lightbox: focus trap đúng, `Esc` trả focus về thumbnail nguồn
 - [ ] VoiceOver đọc được tên + ngày ảnh; tiến trình scan không đọc dồn dập
-- [ ] Zoom browser 200% → không vỡ layout, không cuộn ngang
-- [ ] `prefers-reduced-motion` → tắt stagger và FLIP, giữ crossfade 80ms
-- [ ] Không `outline: none` nào thiếu thay thế (grep chứng minh)
-- [ ] Không animate `width`/`height`/`top`/`left` (grep chứng minh)
+- [x] Zoom browser 200% → không vỡ layout, không cuộn ngang
+- [x] `prefers-reduced-motion` → tắt stagger và FLIP, giữ crossfade 80ms
+- [x] Không `outline: none` nào thiếu thay thế (grep chứng minh)
+- [x] Không animate `width`/`height`/`top`/`left` (grep chứng minh)
 - [ ] Toàn bộ checklist §9 design guidelines đạt
 - [ ] Người chưa từng thấy app: xem được ảnh, đổi cỡ lưới, mở full-screen trong 10 giây, không hỏi
+
+## Kết quả thực tế
+
+**Không có `states.js` / `a11y.js`.** Chín trạng thái là markup tĩnh cộng vài lớp CSS
+bật/tắt — gói chúng vào một module "component" chỉ thêm một tầng gọi hàm. Quản lý focus
+thuộc về lưới ảo hoá (nó mới biết ô nào còn trong DOM), nên nằm trong `grid.js`.
+
+**Roving tabindex + ghim ô đang focus.** Trước đó mọi ô đều `tabindex=0`: Tab qua thư
+viện 70k là 70k lần bấm, và cuộn xa làm ô đang focus bị ảo hoá đi khiến focus rơi về
+`<body>`. Nay cả lưới là một điểm dừng Tab, ô mang focus luôn được giữ lại trong DOM
+dù đã ra ngoài viewport, mũi tên điều hướng bên trong.
+
+**Thumbnail hỏng: server đổi 302 → 404.** Redirect sang `broken.svg` làm `<img>` báo
+LOAD THÀNH CÔNG, client không phân biệt nổi với thumbnail thật nên không thể vẽ trạng
+thái hỏng. 404 để `onerror` bắn, client vẽ icon + tên file. Đơn giản hơn (bớt một
+round-trip) và `test/host-guard.test.js` đã cập nhật theo.
+
+**Hai vi phạm design guidelines tự tìm ra bằng chính test mới:**
+`.scan` animate `width` (giờ là `transform: scaleX`) và `#scroller` animate `left` khi
+mở panel thư mục (bỏ hẳn transition). Cả hai giờ có test grep chặn tái diễn.
+
+**`?state=`** ép từng trạng thái để xem: `scanning`, `bundles`, `denied`, `empty`, `filter`.
+
+## Kiểm chứng còn thiếu
+
+- VoiceOver: chưa thử tay. Test tự động chỉ chứng minh `aria-posinset`/`aria-setsize`/
+  `alt` đúng và live region throttle, không thay được một lần nghe thật.
+- "10 giây không cần hỏi": chưa thử với người thật, và không tự chấm điểm cho mình được.
 
 ## Risk Assessment
 

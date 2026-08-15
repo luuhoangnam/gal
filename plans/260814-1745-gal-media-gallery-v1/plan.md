@@ -91,7 +91,7 @@ Frontend: JS thuần, không framework. Virtualizer tự viết (spike đã ch�
 | 5 | [Virtualized grid](./phase-05-virtualized-grid.md) | Completed | 2, 3 |
 | 6 | [Lightbox + video](./phase-06-lightbox-and-video.md) | Completed | 1, 5 |
 | 7 | [Filter, sort, group, điều hướng](./phase-07-filter-sort-group-and-navigation.md) | Completed | 5 |
-| 8 | [Trạng thái, a11y, polish](./phase-08-states-accessibility-and-polish.md) | Pending | 5, 6, 7 |
+| 8 | [Trạng thái, a11y, polish](./phase-08-states-accessibility-and-polish.md) | Completed | 5, 6, 7 |
 | 9 | [Đóng gói, phân phối](./phase-09-packaging-and-distribution.md) | Pending | tất cả |
 
 Phase 4 chạy song song được với 5 (khác file, khác tầng).

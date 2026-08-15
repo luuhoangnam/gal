@@ -7,10 +7,11 @@ const USAGE = `gal <thư mục> [tuỳ chọn]
   --lan                cho phép truy cập từ máy khác trong LAN (= --host 0.0.0.0)
   --host <địa chỉ>     địa chỉ bind, mặc định 127.0.0.1
   --port <số>          cổng, mặc định 0 = cổng ngẫu nhiên còn trống
+  --watch              tự quét lại khi thư mục có thay đổi
   --include-bundles    quét cả bundle macOS (.photoslibrary, .app, ...)
   --follow-symlinks    đi theo symlink thư mục`;
 
-const FLAGS = new Set(['--lan', '--include-bundles', '--follow-symlinks', '-h', '--help']);
+const FLAGS = new Set(['--lan', '--watch', '--include-bundles', '--follow-symlinks', '-h', '--help']);
 const OPTS = new Set(['--host', '--port']);
 
 /** Parser tối giản: đủ cho 5 tuỳ chọn, không kéo thêm thư viện. */
@@ -71,7 +72,7 @@ export async function main(argv) {
   let url, lanUrls;
   let server;
   try {
-    server = createServer(root, { host, port, scan });
+    server = createServer(root, { host, port, scan, watch: Boolean(opts.watch) });
     ({ url, lanUrls } = await server.listen());
   } catch (err) {
     console.error(

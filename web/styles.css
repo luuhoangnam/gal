@@ -313,16 +313,20 @@ kbd {
   top: var(--bars);
   left: 0;
   height: 2px;
+  width: 100%;
   z-index: 41;
   background: var(--accent);
-  transition: width 0.3s ease-out, opacity 0.5s 0.3s;
+  /* scaleX chứ không phải width: animate width là layout mỗi frame, và design
+     guidelines cấm animate thuộc tính hình học. */
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 0.3s ease-out, opacity 0.5s 0.3s;
 }
 
 /* ---------- lưới ---------- */
 #scroller {
   position: absolute;
   inset: var(--bars) 0 0 0;
-  transition: left 0.16s;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -381,6 +385,8 @@ kbd {
 }
 .tile .vid {
   position: absolute;
+  /* Chữ số cùng bề rộng: badge không co giật khi thời lượng đổi lúc cuộn */
+  font-variant-numeric: tabular-nums;
   right: 6px;
   bottom: 5px;
   color: #fff;
@@ -434,6 +440,53 @@ kbd {
   opacity: 1;
 }
 
+/* Ô hỏng: icon từ server + tên file, không phải một ô xám câm */
+.tile .nm {
+  display: none;
+}
+.tile.broken {
+  background: var(--bg-sunken) url('/assets/broken.svg') no-repeat center 38% / 30%;
+  animation: none; /* ô hỏng thì đứng yên, shimmer nghĩa là "đang tới" */
+}
+.tile.broken .nm {
+  display: block;
+  position: absolute;
+  inset: auto 4px 4px;
+  font-size: 10px;
+  line-height: 1.3;
+  color: var(--fg-tertiary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile.broken img {
+  display: none;
+}
+
+/* Đang quét mà chưa có ảnh: nhịp thở, không spinner */
+.skel {
+  display: none;
+  gap: var(--gap);
+  padding: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.skel.on {
+  display: grid;
+}
+.skel div {
+  height: 130px;
+  border-radius: var(--r-thumb);
+  background: var(--bg-sunken);
+  animation: sh 1.4s infinite;
+}
+.skel div:nth-child(3n) {
+  height: 168px;
+}
+.skel div:nth-child(4n) {
+  height: 108px;
+}
+
 .empty {
   position: absolute;
   inset: 0;
@@ -451,6 +504,24 @@ kbd {
   color: var(--fg-primary);
   font-size: 15px;
   margin-bottom: 4px;
+}
+.empty span {
+  display: block;
+  max-width: 46ch;
+}
+#emptyhint {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--fg-disabled);
+}
+#emptyhint code {
+  font: 12px ui-monospace, monospace;
+  background: var(--bg-sunken);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+#emptyclear {
+  margin-top: 14px;
 }
 
 /* ---------- lightbox ---------- */

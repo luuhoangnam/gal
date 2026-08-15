@@ -15,7 +15,17 @@ export const yieldToMain = globalThis.scheduler?.postTask
 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
-const fmtDur = (s) => `${(s / 60) | 0}:${String(Math.round(s % 60)).padStart(2, '0')}`;
+/**
+ * 7431s → `2:03:51`, không phải `123:51`. Làm tròn giây TRƯỚC khi chia, nếu
+ * không 3599.7s ra `59:60`.
+ */
+export function fmtDur(sec) {
+  const t = Math.max(0, Math.round(sec));
+  const h = (t / 3600) | 0;
+  const m = ((t % 3600) / 60) | 0;
+  const ss = String(t % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
 const fmtHead = (t, group) => {
   const d = new Date(t);
   if (group === 'year') return String(d.getFullYear());
@@ -52,6 +62,9 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
    */
   let held = null;
 
+  /** Ô đang mang tabindex=0 (roving) và được giữ lại trong DOM khi cuộn xa. */
+  let activeId = null;
+
   function relayout(probe) {
     if (held === null || probe !== undefined) {
       held = anchorAt(placed, scroller.scrollTop, probe ?? 8);
@@ -84,18 +97,24 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
     // ARIA `list`, không phải `grid`: `grid` giả định số ô mỗi hàng đều nhau,
     // justified thì không.
     el.setAttribute('role', 'listitem');
-    el.tabIndex = 0;
-    el.innerHTML = '<img alt="" decoding="async" loading="lazy"><span class="vid"></span>';
+    el.tabIndex = -1;
+    el.innerHTML =
+      '<img alt="" decoding="async" loading="lazy"><span class="nm"></span><span class="vid"></span>';
     sizer.appendChild(el);
     return el;
   }
 
   function bind(el, o) {
     const img = el.firstChild;
-    img.alt = o.name;
+    // alt = tên + ngày: screen reader đọc "IMG_2451.jpg, 5 tháng 8, 2026" chứ
+    // không phải một danh sách tên file trần trụi.
+    // Badge thời lượng chỉ là chữ trên ảnh; screen reader không nghe được nếu
+    // không đưa vào alt
+    img.alt = `${o.name}, ${fmtHead(o.t, 'day')}${o.v && o.dur ? `, video ${fmtDur(o.dur)}` : ''}`;
     img.classList.remove('in');
     img.src = `/api/thumb/${o.k}.jpg`;
     el.dataset.id = o.i;
+    el.children[1].textContent = o.name; // chỉ hiện khi ô ở trạng thái .broken
     const vid = el.lastChild;
     vid.hidden = !o.v;
     vid.textContent = o.v && o.dur ? fmtDur(o.dur) : '';
@@ -109,6 +128,45 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
     free.push(el);
   }
 
+  let fresh = 0;
+
+  /** Gắn (nếu chưa) và đặt ô ở vị trí `i`. */
+  function place(i) {
+    const p = placed[i];
+    let el = bound.get(p.o.i);
+    if (el === undefined) {
+      el = free.pop() ?? newTile();
+      bound.set(p.o.i, el);
+      bind(el, p.o);
+      el.hidden = false;
+      const img = el.firstChild;
+      const delay = reduced.matches ? 0 : Math.min(fresh++, STAGGER_MAX - 1) * STAGGER;
+      img.style.transitionDelay = `${delay}ms`;
+      el.classList.remove('broken');
+      if (img.complete) shown(el, img);
+      else {
+        img.onload = () => shown(el, img);
+        // Thumbnail dựng không nổi (file hỏng, ffmpeg thất bại) → ô phải nêu tên
+        // file chứ không câm lặng một mảng xám.
+        img.onerror = () => el.classList.add('broken');
+      }
+    }
+    el.classList.toggle('pending', !p.o.ar);
+    // Screen reader cần biết "ảnh thứ N trên tổng M"; lưới ảo hoá không tự có
+    // thông tin đó vì DOM chỉ chứa vài chục ô.
+    el.setAttribute('aria-posinset', i + 1);
+    el.setAttribute('aria-setsize', placed.length);
+    el.style.transform = `translate(${p.x}px,${p.y}px)`;
+    el.style.width = `${p.w}px`;
+    el.style.height = `${p.h}px`;
+  }
+
+  /** Thumbnail hỏng: server trả placeholder, ô phải nêu tên file chứ không câm. */
+  function shown(el, img) {
+    img.classList.add('in');
+    el.classList.toggle('broken', img.currentSrc.endsWith('/assets/broken.svg'));
+  }
+
   function render() {
     const top = scroller.scrollTop;
     const vh = scroller.clientHeight;
@@ -117,34 +175,29 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
     // tuyệt đối; lùi vài ô là đủ bù, rẻ hơn nhiều so với quét tuyến tính.
     start = Math.max(0, start - 8);
 
+    // Ô đang giữ focus phải ở lại DOM dù đã cuộn ra ngoài viewport. Ảo hoá nó đi
+    // thì focus rơi về <body> và người dùng bàn phím mất hẳn vị trí — đây là chỗ
+    // virtual scroll phá a11y nhiều nhất.
+    const activeIdx = activeId !== null ? byId.get(activeId) : undefined;
+    const pinned = activeIdx !== undefined && (activeIdx < start || activeIdx >= end);
+
     const keep = new Set();
     for (let i = start; i < end; i++) keep.add(placed[i].o.i);
+    if (pinned) keep.add(activeId);
     for (const [id, el] of bound) {
       if (keep.has(id)) continue;
       bound.delete(id);
       release(el);
     }
 
-    let fresh = 0;
-    for (let i = start; i < end; i++) {
-      const p = placed[i];
-      let el = bound.get(p.o.i);
-      if (el === undefined) {
-        el = free.pop() ?? newTile();
-        bound.set(p.o.i, el);
-        bind(el, p.o);
-        el.hidden = false;
-        const img = el.firstChild;
-        const delay = reduced.matches ? 0 : Math.min(fresh++, STAGGER_MAX - 1) * STAGGER;
-        img.style.transitionDelay = `${delay}ms`;
-        if (img.complete) img.classList.add('in');
-        else img.onload = () => img.classList.add('in');
-      }
-      el.classList.toggle('pending', !p.o.ar);
-      el.style.transform = `translate(${p.x}px,${p.y}px)`;
-      el.style.width = `${p.w}px`;
-      el.style.height = `${p.h}px`;
-    }
+    fresh = 0;
+    for (let i = start; i < end; i++) place(i);
+    if (pinned) place(activeIdx);
+
+    // Roving tabindex: cả lưới là MỘT điểm dừng Tab. Để 2000 ô cùng tabindex=0
+    // thì Tab qua thư viện là 70k lần bấm.
+    const rover = activeId ?? placed[start]?.o.i;
+    for (const [id, el] of bound) el.tabIndex = id === rover ? 0 : -1;
 
     renderHeads(top - OVER, top + vh + OVER);
     renderStick(top);
@@ -219,6 +272,11 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
     const i = byId.get(Number(el.dataset.id));
     if (i !== undefined) onOpen?.(i);
   }
+  // Roving tabindex đi theo ô người dùng thật sự chạm vào, dù bằng chuột hay Tab
+  sizer.addEventListener('focusin', (e) => {
+    const el = e.target.closest?.('.tile');
+    if (el) activeId = Number(el.dataset.id);
+  });
   sizer.addEventListener('click', (e) => {
     const el = e.target.closest?.('.tile');
     if (el) openFrom(el);
@@ -310,6 +368,7 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
     focusIndex(i) {
       const p = placed[i];
       if (!p) return;
+      activeId = p.o.i;
       const top = scroller.scrollTop;
       if (p.y < top + 8 || p.y + p.h > top + scroller.clientHeight) {
         scroller.scrollTop = p.y - scroller.clientHeight / 2 + p.h / 2;
@@ -336,6 +395,7 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
     focusId(id) {
       const i = byId.get(id);
       if (i === undefined) return;
+      activeId = id;
       const p = placed[i];
       const top = scroller.scrollTop;
       if (p.y < top || p.y + p.h > top + scroller.clientHeight) {

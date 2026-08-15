@@ -8,12 +8,15 @@ import { openIndex } from './index-db.js';
 import { cacheDirFor } from './cache-dir.js';
 import { createScanner } from './scan.js';
 import { createThumbs } from './thumbs.js';
+import { createWatcher } from './watcher.js';
 import { resolveInside } from './safe-path.js';
 import { serveFile } from './range.js';
 import { mediaType, needsTranscode } from './media-types.js';
 import { fileURLToPath } from 'node:url';
 
 const WEB_DIR = path.join(import.meta.dirname, '..', 'web');
+// Long-poll nhả ra sau ngần này để proxy/trình duyệt không tự cắt kết nối treo
+const WATCH_POLL_MS = 30_000;
 // Phục vụ PhotoSwipe từ node_modules, không CDN — app phải chạy offline.
 // `import.meta.resolve` đúng cả khi npm hoisting đặt gói ở chỗ khác.
 const VENDOR = {
@@ -115,9 +118,11 @@ async function serveStatic(req, res, rel, dir = WEB_DIR) {
 async function sendRendered(req, res, thumbs, hash) {
   const file = await thumbs.get(hash);
   if (!file) {
-    // File hỏng → placeholder, pipeline không chết
-    res.writeHead(302, { Location: '/assets/broken.svg', 'Cache-Control': 'no-store' });
-    return res.end();
+    // File hỏng → 404 để `<img>` bắn onerror; client mới là chỗ biết vẽ ô hỏng
+    // thế nào (icon + tên file). Redirect sang placeholder thì `<img>` báo LOAD
+    // THÀNH CÔNG và client không phân biệt được với thumbnail thật.
+    res.writeHead(404, { 'Cache-Control': 'no-store', 'Content-Type': 'text/plain' });
+    return res.end('thumb failed');
   }
   const st = await stat(file);
   res.writeHead(200, {
@@ -140,7 +145,7 @@ async function writeLine(res, obj) {
 
 export function createServer(
   root,
-  { host = '127.0.0.1', port: wantPort = 0, scan = {}, cacheDir } = {},
+  { host = '127.0.0.1', port: wantPort = 0, scan = {}, cacheDir, watch = false } = {},
 ) {
   let port = 0;
   const exposed = !isLoopback(host);
@@ -155,6 +160,7 @@ export function createServer(
   const db = openIndex(dir);
   const thumbs = createThumbs(root, { cacheDir: path.join(dir, 'thumbs') });
   const scanner = createScanner(root, db, { ...scan, onExtraRoot });
+  const watcher = watch ? createWatcher(root) : null;
 
   const resolveMedia = (p) => resolveInside([root, ...extraRoots], p);
 
@@ -184,6 +190,20 @@ export function createServer(
       }
 
       if (req.method !== 'GET' && req.method !== 'HEAD') return deny(res, 405, 'method');
+
+      // Long-poll: giữ kết nối tới khi thư mục đổi. 204 = server không bật
+      // --watch, client thấy vậy thì thôi hỏi lại.
+      if (url.pathname === '/api/watch') {
+        if (watcher === null) return res.writeHead(204).end();
+        const since = Number(url.searchParams.get('rev')) || 0;
+        const rev = await watcher.wait(since, WATCH_POLL_MS);
+        if (res.destroyed) return;
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store',
+        });
+        return res.end(JSON.stringify({ rev }));
+      }
 
       if (url.pathname.startsWith('/api/thumb/')) {
         const hash = /^\/api\/thumb\/([0-9a-f]{40})\.jpg$/.exec(url.pathname)?.[1];
@@ -259,7 +279,10 @@ export function createServer(
     }
   });
 
-  server.on('close', () => db.close());
+  server.on('close', () => {
+    watcher?.close();
+    db.close();
+  });
 
   return {
     server,

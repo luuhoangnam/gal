@@ -25,6 +25,7 @@
         100%
       </button>
       <button class="icobtn" id="plus" aria-label="Tăng mật độ" title="Lớn hơn (+)">+</button>
+      <button class="icobtn" id="refresh" aria-label="Quét lại" title="Quét lại (r)">↻</button>
       <button class="icobtn" id="helpbtn" aria-label="Phím tắt" title="Phím tắt (?)">?</button>
     </div>
 
@@ -65,7 +66,7 @@
       <input type="date" id="goto" class="vh" aria-label="Nhảy tới ngày" />
     </div>
 
-    <div class="scan" id="scan" style="width: 0"></div>
+    <div class="scan" id="scan"></div>
     <div class="stickhdr" id="stick" aria-hidden="true"></div>
 
     <aside class="side" id="side" hidden aria-label="Thư mục">
@@ -75,10 +76,18 @@
 
     <div id="scroller" tabindex="0">
       <div id="sizer" role="list" aria-label="Ảnh và video"></div>
+
+      <!-- Đang quét mà chưa có ảnh nào: khung nhịp thở, không phải spinner giữa
+           màn hình. Markup tĩnh vì nó không phụ thuộc dữ liệu. -->
+      <div class="skel" id="skel" aria-hidden="true">
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+        <div></div><div></div><div></div><div></div><div></div><div></div>
+      </div>
       <div class="empty" id="empty">
         <div>
           <b id="emptytitle">Không tìm thấy ảnh hay video nào</b>
-          <span id="emptysub">Thư mục này và mọi thư mục con đều trống.</span>
+          <span id="emptysub"></span>
+          <span id="emptyhint"></span>
           <button class="clr" id="emptyclear" hidden>Xoá lọc</button>
         </div>
       </div>
@@ -95,12 +104,16 @@
         <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>justified / ô vuông / masonry</td></tr>
         <tr><td><kbd>G</kbd></td><td>nhảy tới ngày</td></tr>
         <tr><td><kbd>/</kbd></td><td>vào ô lọc theo tên</td></tr>
+        <tr><td><kbd>R</kbd></td><td>quét lại thư mục</td></tr>
         <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>đầu / cuối thư viện</td></tr>
         <tr><td><kbd>?</kbd></td><td>bảng này</td></tr>
       </table>
       <p>Mọi thứ ở đây đều làm được bằng chuột — phím tắt chỉ để nhanh hơn.</p>
       <form method="dialog"><button class="clr">Đóng</button></form>
     </dialog>
+
+    <!-- Tiến trình quét cho screen reader; throttle 5s trong app.js -->
+    <div id="live" class="vh" aria-live="polite" aria-atomic="true"></div>
 
     <script type="module" src="/app.js"></script>
   </body>

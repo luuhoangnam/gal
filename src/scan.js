@@ -44,9 +44,14 @@ export function createScanner(root, db, scanOpts = {}) {
       flushA();
       emit({
         t: 'done_a',
+        // Empty state phải nói ĐÃ QUÉT CÁI GÌ: "không có ảnh" mà không kèm đường
+        // dẫn và số bundle bỏ qua là thông báo vô dụng — phần lớn ảnh trên máy
+        // Mac nằm trong `.photoslibrary` và bị bỏ qua mặc định.
+        root,
         n: stats.files,
         skipped: stats.skippedDirs,
         bundles: stats.skippedBundles,
+        denied: stats.denied,
         dirs: stats.dirs,
         readonly: !db.writable,
       });

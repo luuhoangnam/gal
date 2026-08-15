@@ -63,6 +63,10 @@ export function bindKeyboard({ grid, actions, lightbox, help }) {
       case 'G':
         actions.jumpToDate();
         break;
+      case 'r':
+      case 'R':
+        actions.refresh?.();
+        break;
       case '/':
         actions.focusFilter();
         break;

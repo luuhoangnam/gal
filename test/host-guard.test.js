@@ -192,8 +192,7 @@ test('/api/scan trả NDJSON hợp lệ: pha A rồi pha B', async () => {
 
 test('/api/thumb: hash lạ → placeholder, hash sai định dạng → 404', async () => {
   const unknown = await get(`/api/thumb/${'0'.repeat(40)}.jpg`);
-  assert.equal(unknown.status, 302);
-  assert.equal(unknown.headers.get('location'), '/assets/broken.svg');
+  assert.equal(unknown.status, 404); // client vẽ ô hỏng, server không redirect
 
   for (const bad of ['/api/thumb/xyz.jpg', '/api/thumb/../../etc/passwd', '/api/thumb/abc']) {
     assert.equal((await get(bad)).status, 404, bad);
