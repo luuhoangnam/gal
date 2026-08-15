@@ -1,7 +1,7 @@
 ---
 phase: 9
 title: "Đóng gói, phân phối"
-status: pending
+status: completed
 priority: P1
 effort: "1d"
 dependencies: [1, 2, 3, 4, 5, 6, 7, 8]
@@ -90,15 +90,35 @@ repo chưa có remote, và số đo perf trên CI runner không đáng tin cho t
 
 ## Success Criteria
 
-- [ ] `npm pack` → cài vào thư mục sạch → `npx gal <path>` chạy được
-- [ ] Máy không có ffmpeg → thông báo rõ, exit code khác 0, không stack trace
-- [ ] `gal --help` in usage ngắn, có ví dụ
-- [ ] `gal --clear-cache` xoá `~/.cache/gal`, in dung lượng đã giải phóng
-- [ ] `gal --port 8080` bind đúng cổng chỉ định
-- [ ] Xoá cache rồi chạy lại → vẫn đúng, chỉ chậm hơn
-- [ ] Gói npm không chứa test, không chứa `plans/`, không chứa `docs/wireframe/`
-- [ ] README có ảnh thật, không phải mô tả suông
+- [x] `npm pack` → cài vào thư mục sạch → `npx gal <path>` chạy được
+- [x] Máy không có ffmpeg → thông báo rõ, exit code khác 0, không stack trace
+- [x] `gal --help` in usage ngắn, có ví dụ
+- [x] `gal --clear-cache` xoá cache **của thư mục đó** (`<root>/.gal`), in dung lượng đã giải phóng
+- [x] `gal --port 8080` bind đúng cổng chỉ định
+- [x] Xoá cache rồi chạy lại → vẫn đúng, chỉ chậm hơn
+- [x] Gói npm không chứa test, không chứa `plans/`, không chứa `docs/wireframe/`
+- [x] README có ảnh thật, không phải mô tả suông
 - [ ] Chạy trên thư mục 5 ảnh và thư mục 70k ảnh đều đúng
+
+## Kết quả thực tế
+
+**`--clear-cache` đổi nghĩa.** Cache không còn nằm ở `~/.cache/gal` mà ở `<root>/.gal`
+(hoặc `/tmp/gal/<path-phẳng>` khi thư mục chỉ đọc), nên lệnh này cần biết xoá cache CỦA
+thư mục nào: `gal <thư mục> --clear-cache`.
+
+**ffmpeg là bắt buộc, kiểm tra trước khi mở server.** Mọi thumbnail đều là một frame do
+ffmpeg dựng — ảnh cũng như video — nên thiếu nó thì lưới toàn ô xám, khó hiểu hơn nhiều
+so với một câu báo lỗi. `src/ffmpeg.js` bỏ `which` (không có trên Windows) và tự quét
+PATH, cộng thêm `/opt/homebrew/bin` và `/usr/local/bin` trên macOS: process khởi động từ
+GUI có PATH tối giản, chỉ tin PATH là bỏ sót ffmpeg đã cài.
+
+**Kiểm tra Node đặt trong `bin/gal.js` trước mọi import.** `src/` kéo theo `node:sqlite`;
+trên Node cũ hơn 22 import thẳng chỉ ném `ERR_UNKNOWN_BUILTIN_MODULE`, không nói được gì.
+
+**`npm pack` + cài vào thư mục sạch: chạy được**, kể cả `/vendor/photoswipe/` —
+`import.meta.resolve` tìm đúng gói trong layout đã cài. Kèm một test tĩnh đi theo mọi
+import tương đối trong `src/`, `bin/`, `web/` và đối chiếu với `files` của package.json,
+để lần sau thiếu file thì `npm test` báo chứ không phải người dùng báo.
 
 ## Risk Assessment
 

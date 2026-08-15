@@ -1,7 +1,7 @@
 ---
 title: "Gal media gallery v1"
 description: "Một lệnh `gal <path>` mở gallery web hiển thị đệ quy toàn bộ ảnh/video, chất lượng Google Photos, Node thuần zero-native-dep"
-status: pending
+status: completed
 priority: P1
 effort: "20.5d"
 tags: [cli, media, gallery, nodejs, frontend]
@@ -92,7 +92,7 @@ Frontend: JS thuần, không framework. Virtualizer tự viết (spike đã ch�
 | 6 | [Lightbox + video](./phase-06-lightbox-and-video.md) | Completed | 1, 5 |
 | 7 | [Filter, sort, group, điều hướng](./phase-07-filter-sort-group-and-navigation.md) | Completed | 5 |
 | 8 | [Trạng thái, a11y, polish](./phase-08-states-accessibility-and-polish.md) | Completed | 5, 6, 7 |
-| 9 | [Đóng gói, phân phối](./phase-09-packaging-and-distribution.md) | Pending | tất cả |
+| 9 | [Đóng gói, phân phối](./phase-09-packaging-and-distribution.md) | Completed | tất cả |
 
 Phase 4 chạy song song được với 5 (khác file, khác tầng).
 
