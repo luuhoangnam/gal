@@ -70,9 +70,14 @@ gal <dir> ──► HTTP server on localhost ──► browser
                 │
                 ├─ walk    stream every media file as NDJSON as it is found
                 ├─ meta    EXIF dates + dimensions, second pass, non-blocking
-                ├─ index   SQLite (node:sqlite) cache in ~/.cache/gal/index
-                └─ thumbs  ffmpeg-generated, cached in ~/.cache/gal/thumbs
+                ├─ index   SQLite (node:sqlite) cache in <dir>/.gal/index.db
+                └─ thumbs  ffmpeg-generated, cached in <dir>/.gal/thumbs
 ```
+
+Runtime state lives beside the library it describes: `gal ~/Pics` keeps everything under
+`~/Pics/.gal`, so deleting the folder deletes its cache and an external drive carries its
+index to another machine. If the folder is not writable, it falls back to
+`/tmp/gal/<flattened-path>` (e.g. `/tmp/gal/Users-nam-Pics`).
 
 Two passes. The walker streams filenames the instant it sees them, so the grid paints before
 the scan finishes. A second pass fills in EXIF dates and dimensions and reflows. Results land

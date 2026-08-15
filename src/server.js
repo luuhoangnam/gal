@@ -5,6 +5,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { once } from 'node:events';
 import { openIndex } from './index-db.js';
+import { cacheDirFor } from './cache-dir.js';
 import { createScanner } from './scan.js';
 import { createThumbs } from './thumbs.js';
 import { resolveInside } from './safe-path.js';
@@ -146,10 +147,9 @@ export function createServer(
   const extraRoots = new Set();
   const onExtraRoot = scan.followSymlinks ? (dir) => void extraRoots.add(dir) : undefined;
 
-  const db = openIndex(root, cacheDir);
-  const thumbs = createThumbs(root, {
-    cacheDir: cacheDir ? path.join(cacheDir, 'thumbs') : undefined,
-  });
+  const dir = cacheDir ?? cacheDirFor(root);
+  const db = openIndex(dir);
+  const thumbs = createThumbs(root, { cacheDir: path.join(dir, 'thumbs') });
   const scanner = createScanner(root, db, { ...scan, onExtraRoot });
 
   const resolveMedia = (p) => resolveInside([root, ...extraRoots], p);

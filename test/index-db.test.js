@@ -13,8 +13,8 @@ async function fresh() {
 const mk = (p, m = 1000) => ({ p, s: 1, m, v: 0 });
 
 test('id là rowid gắn với rel, không phải thứ tự phát hiện', async () => {
-  const { root, cacheDir } = await fresh();
-  let db = openIndex(root, cacheDir);
+  const { cacheDir } = await fresh();
+  let db = openIndex(cacheDir);
   let gen = db.beginScan();
   const first = db.upsertBatch([mk('b.jpg'), mk('c.jpg')], gen);
   const idOfC = first.find((r) => r.p === 'c.jpg').i;
@@ -23,7 +23,7 @@ test('id là rowid gắn với rel, không phải thứ tự phát hiện', asyn
   db.close();
 
   // Thêm file xếp TRƯỚC c.jpg theo thứ tự duyệt: thứ tự phát hiện sẽ dịch, rowid thì không
-  db = openIndex(root, cacheDir);
+  db = openIndex(cacheDir);
   gen = db.beginScan();
   const second = db.upsertBatch([mk('a.jpg'), mk('b.jpg'), mk('c.jpg')], gen);
   assert.equal(second.find((r) => r.p === 'c.jpg').i, idOfC);
@@ -32,8 +32,8 @@ test('id là rowid gắn với rel, không phải thứ tự phát hiện', asyn
 });
 
 test('mtime không đổi → không chạy lại pha B; đổi → chạy lại', async () => {
-  const { root, cacheDir } = await fresh();
-  let db = openIndex(root, cacheDir);
+  const { cacheDir } = await fresh();
+  let db = openIndex(cacheDir);
   let gen = db.beginScan();
   const rows = db.upsertBatch([mk('a.jpg', 111)], gen);
   assert.equal(db.pending(gen).length, 1, 'lần đầu phải cần pha B');
@@ -41,14 +41,14 @@ test('mtime không đổi → không chạy lại pha B; đổi → chạy lại
   db.endScan(gen);
   db.close();
 
-  db = openIndex(root, cacheDir);
+  db = openIndex(cacheDir);
   gen = db.beginScan();
   db.upsertBatch([mk('a.jpg', 111)], gen);
   assert.equal(db.pending(gen).length, 0, 'mtime khớp → bỏ qua pha B');
   db.endScan(gen);
   db.close();
 
-  db = openIndex(root, cacheDir);
+  db = openIndex(cacheDir);
   gen = db.beginScan();
   db.upsertBatch([mk('a.jpg', 222)], gen);
   assert.equal(db.pending(gen).length, 1, 'mtime đổi → phải đọc lại');
@@ -57,8 +57,8 @@ test('mtime không đổi → không chạy lại pha B; đổi → chạy lại
 });
 
 test('file bị xoá biến khỏi cache, id file khác không dịch', async () => {
-  const { root, cacheDir } = await fresh();
-  let db = openIndex(root, cacheDir);
+  const { cacheDir } = await fresh();
+  let db = openIndex(cacheDir);
   let gen = db.beginScan();
   const rows = db.upsertBatch([mk('a.jpg'), mk('b.jpg')], gen);
   const idB = rows.find((r) => r.p === 'b.jpg').i;
@@ -66,7 +66,7 @@ test('file bị xoá biến khỏi cache, id file khác không dịch', async ()
   db.endScan(gen);
   db.close();
 
-  db = openIndex(root, cacheDir);
+  db = openIndex(cacheDir);
   gen = db.beginScan();
   db.upsertBatch([mk('b.jpg')], gen); // a.jpg đã bị xoá khỏi đĩa
   db.endScan(gen);
@@ -77,15 +77,15 @@ test('file bị xoá biến khỏi cache, id file khác không dịch', async ()
 });
 
 test('cache nạp lại được sau khi đóng', async () => {
-  const { root, cacheDir } = await fresh();
-  let db = openIndex(root, cacheDir);
+  const { cacheDir } = await fresh();
+  let db = openIndex(cacheDir);
   const gen = db.beginScan();
   const rows = db.upsertBatch([mk('a.jpg')], gen);
   db.writeMeta(rows.map((r) => ({ ...r, w: 4032, h: 3024, orient: 6, taken: 777, ds: 0, dur: null })));
   db.endScan(gen);
   db.close();
 
-  db = openIndex(root, cacheDir);
+  db = openIndex(cacheDir);
   assert.equal(db.cachedCount(), 1);
   const [row] = db.cached();
   assert.equal(row.w, 4032);
@@ -96,18 +96,18 @@ test('cache nạp lại được sau khi đóng', async () => {
 });
 
 test('tiến trình thứ hai cùng root vào chế độ chỉ đọc, không crash', async () => {
-  const { root, cacheDir } = await fresh();
-  const first = openIndex(root, cacheDir);
+  const { cacheDir } = await fresh();
+  const first = openIndex(cacheDir);
   assert.equal(first.writable, true);
 
-  const second = openIndex(root, cacheDir);
+  const second = openIndex(cacheDir);
   assert.equal(second.writable, false, 'tiến trình thứ hai phải là chỉ đọc');
   assert.doesNotThrow(() => second.cached());
   second.close();
 
   first.close();
   // Lock đã nhả → lần mở sau lại ghi được
-  const third = openIndex(root, cacheDir);
+  const third = openIndex(cacheDir);
   assert.equal(third.writable, true);
   third.close();
 });

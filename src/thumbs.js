@@ -2,9 +2,10 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, createReadStream } from 'node:fs';
 import { stat, rename, unlink, readdir } from 'node:fs/promises';
-import { homedir, cpus } from 'node:os';
+import { cpus } from 'node:os';
 import path from 'node:path';
 import { ffmpegPath } from './ffmpeg.js';
+import { cacheDirFor } from './cache-dir.js';
 
 const TARGET = 320;
 // Cạnh dài bản preview cho lightbox: đủ nét ở DPR 2 trên màn 13", vẫn rẻ hơn
