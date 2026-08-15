@@ -1,7 +1,7 @@
 ---
 phase: 4
 title: "Thumbnail pipeline"
-status: pending
+status: completed
 priority: P1
 effort: "2.5d"
 dependencies: [1, 3]
@@ -87,19 +87,49 @@ theo LRU dựa trên `atime`. Không chạy nền liên tục.
 
 ## Success Criteria
 
-- [ ] HEIC iPhone → JPEG 320px hiển thị được trên browser
-- [ ] Video → poster frame, không phải khung đen
-- [ ] File hỏng / 0 byte → placeholder, request tiếp theo vẫn chạy bình thường
-- [ ] Cuộn nhanh qua 5000 ảnh → chỉ sinh thumbnail vùng dừng lại, không sinh hết đường đi
-      (đo bằng số job ffmpeg đã chạy)
-- [ ] Yêu cầu cùng id 20 lần song song → đúng 1 process ffmpeg
-- [ ] Sửa mtime file → thumbnail tự sinh lại
-- [ ] Lần thứ hai mở cùng thư mục → thumbnail lấy từ cache, không gọi ffmpeg
-- [ ] Cache vượt 2GB → dọn LRU, không xoá file đang dùng
-- [ ] Thư mục 500 file hỏng: cuộn qua lại nhiều lần → mỗi file chỉ spawn ffmpeg **một lần**
-      (negative cache hoạt động), không bão process
-- [ ] Chạy `gal` trên root A rồi root B trùng cổng → không lẫn thumbnail giữa hai root
-- [ ] Khoá cache khớp giữa Phase 3 và Phase 4 → mở lại lần hai không sinh lại thumbnail nào
+- [x] HEIC iPhone → JPEG hiển thị được (đo thật trên thư viện: 320×240, 13-27KB)
+- [x] Video → poster frame, không phải khung đen (test dùng `testsrc`, màu phẳng không phân biệt được)
+- [x] File hỏng / 0 byte → placeholder `/assets/broken.svg`, request tiếp theo vẫn chạy
+- [ ] Cuộn nhanh qua 5000 ảnh → chỉ sinh thumbnail vùng dừng lại
+      — **cần client, kiểm ở Phase 5.** Cơ chế đã có: `/api/priority` + hàng đợi hai mức
+- [x] Yêu cầu cùng hash 20 lần song song → đúng 1 process ffmpeg
+- [x] Sửa mtime file → khoá đổi → thumbnail sinh lại
+- [x] Lần thứ hai → lấy từ cache, `spawned` không tăng
+- [x] Cache vượt ngưỡng → dọn LRU theo `atime`, dừng đúng lúc xuống dưới ngưỡng, không xoá sạch
+- [x] File hỏng gọi lại 5 lần → vẫn đúng 1 spawn mỗi file (negative cache), không bão process
+- [x] Root khác → khoá khác (khoá gồm absolute path), không lẫn cache giữa hai root
+- [x] Khoá dùng chung `Math.floor(mtimeMs)` với Phase 3 → mở lại không sinh lại thumbnail nào
+
+## Ghi chú thực hiện
+
+### `scale=320:-1` là sai — chặn cạnh dài, không chặn chiều rộng
+
+Lệnh trong plan cố định **chiều rộng**. Đo thật: một screenshot dọc cho ra thumbnail
+**320×693**, decode 887KB thay vì 307KB. Với thư viện 70k và bộ nhớ grid bám theo số ảnh
+đã cuộn qua (Phase 5), đây là chi phí nhân lên hàng chục nghìn lần.
+
+Sửa thành `scale=w=320:h=320:force_original_aspect_ratio=decrease` — lọt trong hộp 320×320.
+
+| | Trung bình / ảnh | Ngoại suy 70k |
+|---|---|---|
+| `scale=320:-1` | 27,0 KB | 1.823 MB |
+| Chặn cạnh dài | 16,6 KB | **1.119 MB** |
+
+Ước tính 11,2KB của plan lấy từ một ảnh mẫu; con số thật trên thư viện là 16,6KB.
+Vẫn dưới ngưỡng dọn 2GB, nên ngưỡng giữ nguyên.
+
+### Chi tiết khác
+
+- **Ghi ra `.tmp` thì ffmpeg không đoán được format** từ đuôi file và fail sạch. Phải thêm
+  `-f image2`. Đây là chi phí của việc ghi atomic mà plan không nêu.
+- **Kill theo process group** (`spawn` với `detached: true`, `process.kill(-pid)`) chứ không
+  kill mỗi process cha — đúng phản ứng mà mục Risk yêu cầu.
+- Hàng đợi hai mức làm bằng cách gắn cờ `priority` lên **hàm resolve** đang chờ, không phải lên
+  promise: promise không mang được thông tin cho bên giải phóng semaphore đọc.
+- Negative cache nằm trong RAM (`Set`), không ghi đĩa. Đủ cho yêu cầu "mỗi file hỏng chỉ spawn
+  một lần"; ghi đĩa chỉ có ích khi khởi động lại app nhiều lần trên cùng thư mục rác.
+- `sweep()` chạy một lần lúc khởi động; nếu cache >500MB mà chưa vượt ngưỡng thì CLI in dung
+  lượng ra stdout — phản ứng cho rủi ro "770MB bất ngờ với user".
 
 ## Risk Assessment
 

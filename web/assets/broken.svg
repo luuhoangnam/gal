@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Không đọc được ảnh">
+  <rect width="64" height="64" fill="#eceff1"/>
+  <path d="M16 42l10-12 7 8 5-5 10 9z" fill="#b0bec5"/>
+  <circle cx="24" cy="22" r="4" fill="#b0bec5"/>
+  <path d="M12 12l40 40" stroke="#90a4ae" stroke-width="3" stroke-linecap="round"/>
+</svg>
