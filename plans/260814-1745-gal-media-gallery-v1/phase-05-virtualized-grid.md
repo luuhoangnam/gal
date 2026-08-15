@@ -25,8 +25,8 @@ vứt bỏ thành code production, và sửa lỗi trôi scroll spike đã tìm 
 - Fade-in thumbnail có stagger 15ms, tối đa 8 ô
 
 **Non-functional**
-- 60fps khi cuộn, DOM <2000 node
-- RAM: theo ngưỡng chốt lại ở `plan.md` (ngân sách 500MB cũ đã bị đo bác bỏ — xem mục RAM bên dưới)
+- 60fps khi cuộn **và sau khi đã cuộn qua 10.000 ảnh**, DOM <2000 node
+- Không rò rỉ phía JS, không crash tab. **Không có ngưỡng RAM cứng** — đã chốt bỏ, xem `plan.md`
 - Trôi scroll tích luỹ <10px ở giữa thư viện suốt pha B
 - Chạy được trên WebKit/Safari, không chỉ Chromium
 
@@ -160,10 +160,11 @@ sai vì không phải node quyết định, và sai vì số thật lớn hơn n
 - [ ] 70k item: cuộn 60fps trở lên, p95 frame time <16,7ms (đo bằng Playwright như spike)
 - [ ] DOM node <2000 tại mọi thời điểm
 - [ ] **Chạy được trên Safari** (browser mặc định macOS) — không `requestIdleCallback` trần
-- [ ] RAM: theo ngưỡng chốt lại ở `plan.md` sau khi chủ dự án quyết. Đo bằng RSS tiến trình,
-      với JPEG thật, sau khi cuộn qua ≥10.000 ảnh — không đo lúc vừa mở
+- [ ] **60fps sau khi đã cuộn qua 10.000 ảnh** (đo bằng RSS tiến trình + frame time, JPEG thật —
+      không đo lúc vừa mở, và không dùng `performance.memory` vì WebKit không có)
 - [ ] Không rò rỉ phía JS: sau khi cuộn qua 10k ảnh rồi lọc còn 100, RAM phải nhả đáng kể
       (nếu không nhả thì có tham chiếu JS treo, khác với cache browser)
+- [ ] Không crash tab khi cuộn hết 70k liên tục
 - [ ] Trôi scroll tích luỹ <10px ở 15%, 50%, 85% thư viện suốt pha B
 - [ ] Đổi 3 mode qua lại: không reload, vị trí scroll giữ nguyên trong sai số một hàng
 - [ ] Đổi mật độ: ảnh ở tâm viewport vẫn ở tâm sau khi đổi

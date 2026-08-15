@@ -100,7 +100,9 @@ Trích từ contract, tất cả đều đo được:
 - [ ] `gal ~/Pictures` trên máy sạch → ảnh đầu tiên <1s, không có wizard/form/settings
 - [ ] Chạy đúng trên **Safari** (browser mặc định macOS), không chỉ Chrome
 - [ ] 70k file: scroll 60fps, DOM <2000 node **với thumbnail JPEG thật**
-- [ ] RAM: theo ngưỡng chốt lại ở mục "Quyết định cần chủ dự án" bên dưới
+- [ ] Giữ 60fps **sau khi đã cuộn qua 10.000 ảnh**, không chỉ lúc vừa mở
+- [ ] Không rò rỉ JS: cuộn 10k ảnh rồi lọc còn 100 → RAM nhả đáng kể
+- [ ] Không crash tab khi cuộn hết 70k liên tục
 - [ ] Timeline theo ngày chụp EXIF (không phải mtime), sticky header đúng
 - [ ] 3 grid mode, đổi mode không reload, không nhảy scroll
 - [ ] Filter type + thư mục + khoảng ngày + size, kết hợp được, <100ms
@@ -138,13 +140,25 @@ Chỉ 24 ô sống mà vẫn 385MB. Bộ nhớ bám theo **số ảnh đã từn
 Ba biện pháp trong plan (`loading=lazy`, gỡ `src`, thu hẹp overscan) **không điều khiển được nó**
 (red team đo riêng: chênh 3%).
 
-Ba lựa chọn, cần chọn một trước khi bắt đầu Phase 5:
+**Đã chốt (2026-08-15, quyết định của chủ dự án): bỏ ngưỡng cứng 500MB.**
+Giữ 320px, không tự quản lý bitmap ở v1. Lý do: bộ nhớ này là cache ảnh đã decode của browser —
+loại bộ nhớ browser tự thu hồi khi hệ thống thiếu, không phải rò rỉ. Đặt một con số cứng lên nó
+là đo sai đại lượng và sẽ dẫn tới tối ưu sai chỗ.
 
-| | Cách | Đánh đổi |
-|---|---|---|
-| A | **Bỏ ngưỡng cứng 500MB**, thay bằng: không rò rỉ phía JS, không crash tab, 60fps sau khi cuộn 10k ảnh | Trung thực với cách browser hoạt động; bộ nhớ cache là loại browser tự thu hồi khi thiếu. Nhưng người dùng có thể thấy con số RAM lớn trong Activity Monitor |
-| B | **Hạ thumbnail xuống 160px** | Giảm bộ nhớ đáng kể, nhưng 320px vốn đã dưới chuẩn Retina ở DPR 2 → ảnh mờ thấy rõ. Đánh đổi trực tiếp với USP "đẹp" |
-| C | **Tự quản lý vòng đời bitmap** (`createImageBitmap` + `blob:` + `revokeObjectURL`, hoặc canvas) | Lấy lại quyền kiểm soát thật, giữ 320px. Nhưng phải tải lại khi cuộn ngược, phức tạp hơn nhiều, thêm ~2-3 ngày vào Phase 5 |
+Tiêu chí thay thế, đều đo được:
+
+- **Không rò rỉ phía JS**: cuộn qua 10.000 ảnh rồi lọc còn 100 → RAM phải nhả đáng kể.
+  Không nhả nghĩa là có tham chiếu JS treo — đó mới là bug của ta, khác với cache browser.
+- **Không crash tab** khi cuộn hết 70k liên tục.
+- **Giữ 60fps** sau khi đã cuộn qua 10.000 ảnh (không chỉ lúc vừa mở).
+- **DOM node <2000** tại mọi thời điểm (tiêu chí này vẫn đúng và vẫn kiểm soát được).
+
+Hai phương án đã cân nhắc và loại:
+- *Hạ 160px*: giảm bộ nhớ thật, nhưng 320px vốn đã dưới chuẩn Retina ở DPR 2 → ảnh mờ thấy rõ,
+  đánh đổi trực tiếp với USP "đẹp".
+- *Tự quản lý bitmap* (`createImageBitmap` + `revokeObjectURL`): lấy lại quyền kiểm soát thật
+  nhưng phải tải lại khi cuộn ngược, thêm ~2-3 ngày. **Giữ làm phương án dự phòng** nếu tiêu chí
+  60fps-sau-10k-ảnh không đạt.
 
 ### 2. ffmpeg — yêu cầu bản hệ thống
 
