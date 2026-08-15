@@ -1,7 +1,7 @@
 ---
 phase: 3
 title: "Metadata pass + SQLite index"
-status: pending
+status: completed
 priority: P1
 effort: "2d"
 dependencies: [2]
@@ -175,20 +175,59 @@ cho v1 vì walk chỉ tốn <1s.
 
 ## Success Criteria
 
-- [ ] ffprobe lấy đúng width/height/creation_time/duration từ `.mov` iPhone gốc và `.mp4`
-- [ ] Video quay dọc hiển thị đúng tỉ lệ (đọc rotation từ `side_data` của ffprobe)
-- [ ] 6.300 video (~9% của 70k) xong trong <3 phút với pool đồng thời
-- [ ] HEIC iPhone lấy được `DateTimeOriginal` (chứng minh exifreader hoạt động ở chỗ exifr hỏng)
-- [ ] Ảnh có orientation 6 → tỉ lệ đảo đúng
-- [ ] Benchmark 1000 file thật: ghi lại throughput, ngoại suy 70k, **so với ngân sách 3 phút**
-- [ ] Ảnh hỏng / 0 byte → trả metadata rỗng, không ném lỗi làm dừng pool
-- [ ] Mở lại root đã index → grid đầy đủ <500ms, **không chạy lại pha B** (chứng minh mtime khớp)
-- [ ] Thêm 1 file mới vào thư mục rồi mở lại → file mới xuất hiện
-- [ ] **Id ổn định:** ghi lại id của một ảnh, thêm 100 file vào giữa cây, mở lại → id đó không đổi
-- [ ] Xoá file rồi mở lại → biến khỏi grid (cột `seen`), id các file khác không dịch
-- [ ] Chạy hai tiến trình `gal` cùng root → tiến trình thứ hai không crash, vào chế độ chỉ đọc
-- [ ] Tải lại trang giữa lúc scan → không sinh walker thứ hai (một scan mỗi root)
-- [ ] File `.mp4` hỏng / thực chất là text → ffprobe fail sạch, item vẫn vào index với metadata rỗng, pipeline không dừng
+- [x] ffprobe lấy đúng width/height/creation_time/duration từ `.mov` iPhone gốc và `.mp4`
+- [x] Video quay dọc hiển thị đúng tỉ lệ — 14/15 video iPhone thật có `rotation: -90`,
+      stream 1920×1440 → hiển thị 1440×1920. ffmpeg **không** dựng được fixture có side_data
+      (mọi cách đều xoay khung hình thật), nên test kiểm hàm chuẩn hoá góc trên đúng hình dạng đó
+- [x] Pha B 70.822 file xong trong **8,3 giây** (ngân sách 3 phút)
+- [x] HEIC iPhone lấy được `DateTimeOriginal` — chỗ exifr hỏng
+- [x] Ảnh có orientation 6 → tỉ lệ đảo đúng (test dựng JPEG + APP1 EXIF tự viết)
+- [x] Benchmark mẫu ngẫu nhiên 1000 file: 0,15ms/file → ngoại suy 0,2 phút
+- [x] Ảnh hỏng / 0 byte / không tồn tại → metadata rỗng, không ném
+- [x] Mở lại root đã index → **70.822 mục đầy đủ ở 126ms**, `done_b` với 0 item = pha B không chạy lại
+- [x] Thêm file mới → chỉ file mới vào `pending`, chạy pha B riêng chúng
+- [x] **Id ổn định:** thêm file xếp trước trong thứ tự duyệt, id cũ không đổi
+- [x] Xoá file → biến khỏi cache theo cột `seen`, id file khác không dịch
+- [x] Hai tiến trình `gal` cùng root → tiến trình thứ hai `readonly:true`, không crash;
+      lock của pid đã chết được thu hồi ở lần chạy sau
+- [x] Tải lại trang giữa lúc scan → gắn vào scan đang chạy, không sinh walker thứ hai
+- [x] File `.mp4` thực chất là text → ffprobe fail sạch, pipeline không dừng
+
+## Ghi chú thực hiện
+
+### Số đo trên thư viện thật (70.822 file, 2026-08-15)
+
+| Mốc | Lần đầu | Lần mở lại |
+|---|---|---|
+| Item đầu tiên | 2ms | 84ms (từ cache) |
+| Grid đầy đủ | — | **126ms** |
+| `done_a` | 1.375ms | 1.048ms |
+| `done_b` | **8.292ms** | 1.048ms (0 item — không chạy lại) |
+
+### Ba chỗ số đo bác bỏ giả định của plan
+
+1. **Pha A giờ là 1,4s, không phải <1s.** Tiêu chí <1s của Phase 2 đo walker trần (620ms).
+   Id ổn định bắt buộc ghi DB trước khi stream, và upsert 70k tốn **~380ms** — đo riêng, không
+   đổi theo kích thước lô (500/2000/10000 đều 350-380ms). Con số 31ms trong plan là INSERT trần,
+   không có `UNIQUE(rel)` + `ON CONFLICT ... RETURNING`. Đây là cái giá thật của id ổn định.
+   Lời hứa "không màn hình chờ" vẫn giữ: ảnh đầu tiên ở 2ms.
+2. **Video chiếm 0,1% thư viện này, không phải 9%.** Ước tính 2,6 phút cho pha B do đó lệch
+   rất xa — thực tế 8,3 giây. Ngân sách 3 phút còn nguyên chỗ trống; áp lực thay ffprobe bằng
+   box-walker gần như biến mất trên máy này.
+3. **64KB đủ cho mọi ảnh CÓ EXIF.** Đo 400 ảnh ngẫu nhiên: 64KB bắt 166 hit, 128KB/256KB/đọc cả
+   file thêm **0 hit**. 234 file còn lại là `.jpeg` phái sinh của Photos, đọc hết file cũng không
+   có EXIF. Nên escalate chỉ áp dụng cho HEIC/HEIF/AVIF (lý do gốc của ngưỡng 128KB là bố cục box
+   ISO-BMFF); JPEG đặt APP1 ngay đầu file nên đọc thêm là phí. Tỉ lệ EXIF toàn thư viện: 43%.
+
+### Quyết định thiết kế
+
+- **`src/scan.js` giữ log message của scan đang chạy**, client vào sau phát lại lịch sử rồi bám
+  tiếp. Đơn giản hơn multiplex từng chunk, và message pha A chỉ là id + đường dẫn.
+- **`date_src IS NULL` = chưa chạy pha B.** Không thêm cột `meta_done`: sau pha B `date_src` luôn
+  có giá trị (0 exif / 1 mtime), nên NULL đã là dấu hiệu đủ. `mtime` đổi thì upsert tự set lại NULL.
+- **Lockfile chứa pid, kiểm bằng `process.kill(pid, 0)`.** Crash không khoá vĩnh viễn thư viện.
+- Ngày EXIF parse thủ công như **giờ địa phương**: `"2025:03:14 09:26:01"` không có timezone và
+  `Date.parse` hỏng với dấu hai chấm ở phần ngày. `creation_time` của video thì là ISO-8601 có `Z`.
 
 ## Risk Assessment
 
