@@ -7,6 +7,9 @@ import path from 'node:path';
 import { ffmpegPath } from './ffmpeg.js';
 
 const TARGET = 320;
+// Cạnh dài bản preview cho lightbox: đủ nét ở DPR 2 trên màn 13", vẫn rẻ hơn
+// nhiều so với dựng full-res của một file HEIC 48MP.
+const PREVIEW = 1600;
 const TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 
@@ -44,7 +47,7 @@ export function createThumbs(root, { cacheDir, maxBytes = DEFAULT_MAX_BYTES } = 
   function keyed(items) {
     return items.map((it) => {
       const k = thumbKey(path.join(root, it.p), it.m, it.s);
-      registry.set(k, { rel: it.p, kind: it.v });
+      registry.set(k, { rel: it.p, kind: it.v, target: TARGET });
       return { ...it, k };
     });
   }
@@ -71,7 +74,7 @@ export function createThumbs(root, { cacheDir, maxBytes = DEFAULT_MAX_BYTES } = 
     next();
   }
 
-  function runFfmpeg(src, out, isVideo) {
+  function runFfmpeg(src, out, isVideo, target, input) {
     return new Promise((resolve) => {
       const bin = ffmpegPath();
       if (!bin) return resolve(false);
@@ -79,13 +82,18 @@ export function createThumbs(root, { cacheDir, maxBytes = DEFAULT_MAX_BYTES } = 
       const args = [
         ...(isVideo ? ['-ss', '1'] : []),
         '-i', src,
-        // -map bắt buộc với HEIC nhiều tile: thiếu nó ffmpeg dựng filtergraph
-        // phức tạp rồi fail "Filtergraph ... fed from a complex filtergraph"
-        '-map', '0:v:0',
         // Chặn CẠNH DÀI, không phải chiều rộng: `scale=320:-1` cho ảnh dọc và
         // screenshot ra 320×693 (đo thật) — decode 887KB thay vì 307KB, và bộ nhớ
         // grid bám theo số ảnh đã cuộn qua nên đây là chi phí nhân lên 70k lần.
-        '-filter:v', `scale=w=${TARGET}:h=${TARGET}:force_original_aspect_ratio=decrease`,
+        //
+        // filter_complex chứ không phải -filter:v: ảnh HEIC iPhone là lưới ô
+        // 512×512 và chỉ đọc được qua stream group. `-filter:v` đơn giản thì
+        // ffmpeg từ chối ("fed from a complex filtergraph"), còn `-map 0:v:0`
+        // lấy đúng MỘT ô — đo thật: thumbnail ra 320×320 vuông, là một góc ảnh
+        // chứ không phải tấm ảnh.
+        '-filter_complex',
+        `[${input}]scale=w=${target}:h=${target}:force_original_aspect_ratio=decrease[o]`,
+        '-map', '[o]',
         '-frames:v', '1',
         '-q:v', '4',
         // Ghi ra .tmp nên ffmpeg không đoán được format từ đuôi file — phải nói rõ
@@ -121,7 +129,12 @@ export function createThumbs(root, { cacheDir, maxBytes = DEFAULT_MAX_BYTES } = 
     const out = fileFor(hash);
     const tmp = `${out}.${process.pid}.tmp`; // ghi tạm rồi rename: không đọc phải file nửa vời
 
-    const ok = await runFfmpeg(src, tmp, info.kind === 1);
+    // HEIC không phải file nào cũng là lưới ô: bản một ô không có stream group
+    // nên `0:g:0` sẽ không khớp stream nào. Thử group trước, rồi lùi về stream
+    // thường — chỉ tốn thêm một lần spawn cho đúng nhánh hiếm.
+    const isHeic = /\.hei[cf]$/i.test(info.rel);
+    let ok = await runFfmpeg(src, tmp, info.kind === 1, info.target, isHeic ? '0:g:0' : '0:v:0');
+    if (!ok && isHeic) ok = await runFfmpeg(src, tmp, false, info.target, '0:v:0');
     if (!ok) {
       await unlink(tmp).catch(() => {});
       failed.add(hash);
@@ -142,6 +155,19 @@ export function createThumbs(root, { cacheDir, maxBytes = DEFAULT_MAX_BYTES } = 
       return spawned;
     },
     knows: (hash) => registry.has(hash),
+
+    /**
+     * Đăng ký một bản preview cạnh dài 1600px và trả khoá của nó.
+     * Chỉ dùng cho ảnh Chrome không tự giải mã được (HEIC, TIFF) — mọi định dạng
+     * khác lightbox trỏ thẳng `/api/file`, không tốn thêm một lần ffmpeg nào.
+     */
+    async previewKey(rel) {
+      const src = path.join(root, rel);
+      const st = await stat(src);
+      const k = thumbKey(src, st.mtimeMs, st.size, PREVIEW);
+      registry.set(k, { rel, kind: 0, target: PREVIEW });
+      return k;
+    },
 
     /** Đánh dấu vùng đang xem để hàng đợi phục vụ trước. */
     setPriority(hashes) {

@@ -9,9 +9,15 @@ import { createScanner } from './scan.js';
 import { createThumbs } from './thumbs.js';
 import { resolveInside } from './safe-path.js';
 import { serveFile } from './range.js';
-import { mediaType } from './media-types.js';
+import { mediaType, needsTranscode } from './media-types.js';
+import { fileURLToPath } from 'node:url';
 
 const WEB_DIR = path.join(import.meta.dirname, '..', 'web');
+// Phục vụ PhotoSwipe từ node_modules, không CDN — app phải chạy offline.
+// `import.meta.resolve` đúng cả khi npm hoisting đặt gói ở chỗ khác.
+const VENDOR = {
+  '/vendor/photoswipe/': path.dirname(fileURLToPath(import.meta.resolve('photoswipe'))),
+};
 
 const STATIC_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -88,8 +94,8 @@ function deny(res, code, msg) {
   res.end(msg);
 }
 
-async function serveStatic(req, res, rel) {
-  const abs = await resolveInside(WEB_DIR, rel);
+async function serveStatic(req, res, rel, dir = WEB_DIR) {
+  const abs = await resolveInside(dir, rel);
   const st = await stat(abs);
   if (!st.isFile()) throw new Error('not a file');
   res.writeHead(200, {
@@ -98,6 +104,26 @@ async function serveStatic(req, res, rel) {
     'Cache-Control': 'no-cache',
   });
   createReadStream(abs).pipe(res);
+}
+
+/** Gửi một ảnh JPEG do ffmpeg dựng (thumbnail hoặc preview), dùng chung header. */
+async function sendRendered(req, res, thumbs, hash) {
+  const file = await thumbs.get(hash);
+  if (!file) {
+    // File hỏng → placeholder, pipeline không chết
+    res.writeHead(302, { Location: '/assets/broken.svg', 'Cache-Control': 'no-store' });
+    return res.end();
+  }
+  const st = await stat(file);
+  res.writeHead(200, {
+    'Content-Type': 'image/jpeg',
+    'Content-Length': st.size,
+    'X-Content-Type-Options': 'nosniff',
+    // Khoá đã gồm mtime+size nên nội dung không bao giờ đổi dưới cùng URL
+    'Cache-Control': 'max-age=31536000, immutable',
+  });
+  if (req.method === 'HEAD') return res.end();
+  thumbs.stream(file).pipe(res);
 }
 
 const BATCH = 500;
@@ -158,22 +184,21 @@ export function createServer(
       if (url.pathname.startsWith('/api/thumb/')) {
         const hash = /^\/api\/thumb\/([0-9a-f]{40})\.jpg$/.exec(url.pathname)?.[1];
         if (!hash) return deny(res, 404, 'not found');
-        const file = await thumbs.get(hash);
-        if (!file) {
-          // File hỏng → placeholder, pipeline không chết
-          res.writeHead(302, { Location: '/assets/broken.svg', 'Cache-Control': 'no-store' });
-          return res.end();
+        return await sendRendered(req, res, thumbs, hash);
+      }
+
+      // Bản 1600px cho lightbox, chỉ với ảnh Chrome không giải mã được (HEIC/TIFF).
+      if (url.pathname === '/api/preview') {
+        const p = url.searchParams.get('p');
+        if (!p) return deny(res, 400, 'missing p');
+        let abs;
+        try {
+          abs = await resolveMedia(p);
+        } catch {
+          return deny(res, 403, 'forbidden');
         }
-        const st = await stat(file);
-        res.writeHead(200, {
-          'Content-Type': 'image/jpeg',
-          'Content-Length': st.size,
-          'X-Content-Type-Options': 'nosniff',
-          // Khoá đã gồm mtime+size nên nội dung không bao giờ đổi dưới cùng URL
-          'Cache-Control': 'max-age=31536000, immutable',
-        });
-        if (req.method === 'HEAD') return res.end();
-        return void thumbs.stream(file).pipe(res);
+        if (!needsTranscode(path.extname(abs))) return deny(res, 404, 'no preview needed');
+        return await sendRendered(req, res, thumbs, await thumbs.previewKey(p));
       }
 
       if (url.pathname === '/api/file') {
@@ -216,6 +241,11 @@ export function createServer(
       }
 
       if (url.pathname.startsWith('/api/')) return deny(res, 404, 'not found');
+
+      for (const [prefix, dir] of Object.entries(VENDOR)) {
+        if (!url.pathname.startsWith(prefix)) continue;
+        return await serveStatic(req, res, url.pathname.slice(prefix.length), dir);
+      }
 
       const rel = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
       return await serveStatic(req, res, rel);

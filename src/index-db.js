@@ -1,8 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
-import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
-import { realpathSync } from 'node:fs';
-import { homedir } from 'node:os';
 import path from 'node:path';
 
 const SCHEMA = `
@@ -22,10 +19,9 @@ CREATE INDEX IF NOT EXISTS ix_dir   ON media(dir);
 CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v INTEGER);
 `;
 
-export function dbPathFor(root, cacheDir = path.join(homedir(), '.cache', 'gal', 'index')) {
-  // Khoá theo realpath: hai đường dẫn khác nhau trỏ cùng thư mục phải dùng chung index
-  const hash = createHash('sha1').update(realpathSync(root)).digest('hex');
-  return path.join(cacheDir, `${hash}.db`);
+/** cacheDir đã là duy nhất theo root (xem cache-dir.js), nên tên file cố định. */
+export function dbPathFor(cacheDir) {
+  return path.join(cacheDir, 'index.db');
 }
 
 /**
@@ -44,8 +40,8 @@ function tryLock(lockPath) {
   return true;
 }
 
-export function openIndex(root, cacheDir) {
-  const file = dbPathFor(root, cacheDir);
+export function openIndex(cacheDir) {
+  const file = dbPathFor(cacheDir);
   mkdirSync(path.dirname(file), { recursive: true });
 
   const db = new DatabaseSync(file);

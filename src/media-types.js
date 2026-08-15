@@ -29,6 +29,15 @@ export const VIDEO_EXTS = new Set(
   Object.keys(MEDIA_TYPES).filter((e) => MEDIA_TYPES[e].startsWith('video/')),
 );
 
+// Định dạng ảnh mà Chrome KHÔNG giải mã được trong <img>. Lightbox phải trỏ vào
+// bản preview do ffmpeg dựng, nếu không HEIC (định dạng mặc định của iPhone)
+// hiện ô ảnh vỡ đúng lúc người xem phóng to.
+const TRANSCODE_EXTS = new Set(['.heic', '.heif', '.tif', '.tiff']);
+
+export function needsTranscode(ext) {
+  return TRANSCODE_EXTS.has(ext.toLowerCase());
+}
+
 export function mediaType(ext) {
   return MEDIA_TYPES[ext.toLowerCase()] ?? null;
 }
