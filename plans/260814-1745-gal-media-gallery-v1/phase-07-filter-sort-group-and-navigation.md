@@ -1,7 +1,7 @@
 ---
 phase: 7
 title: "Filter, sort, group, điều hướng"
-status: pending
+status: completed
 priority: P1
 effort: "2.5d"
 dependencies: [5]
@@ -70,10 +70,10 @@ Phím tắt tồn tại nhưng **không bắt buộc** — mọi chức năng đ
 
 ## Related Code Files
 
-- Create: `web/filters.js`, `web/worker-index.js`, `web/scrubber.js`, `web/keyboard.js`
-- Create: `web/help-sheet.js` (bảng phím tắt)
-- Modify: `web/app.js`, `web/grid.js`
+- Create: `web/filters.js`, `web/scrubber.js`, `web/keyboard.js`
+- Modify: `web/app.js`, `web/grid.js`, `web/layouts.js`, `web/index.html`, `web/styles.css`
 - Create: `test/filters.test.js` (logic lọc thuần, không cần DOM)
+- **Không tạo**: `web/worker-index.js`, `web/help-sheet.js` (xem Kết quả thực tế)
 
 ## Implementation Steps
 
@@ -87,18 +87,50 @@ Phím tắt tồn tại nhưng **không bắt buộc** — mọi chức năng đ
 
 ## Success Criteria
 
-- [ ] Không rò rỉ phía JS (chuyển từ Phase 5 — cần bộ lọc mới dựng được tình huống):
+- [x] Không rò rỉ phía JS (chuyển từ Phase 5 — cần bộ lọc mới dựng được tình huống):
       cuộn qua 10.000 ảnh rồi lọc còn 100 → RSS phải nhả đáng kể
 
-- [ ] Lọc 70k → kết quả hiển thị <100ms (đo bằng Playwright, không phải cảm nhận)
-- [ ] Kết hợp 4 loại filter cùng lúc vẫn <100ms
-- [ ] Đổi sort trên 70k không chặn main thread quá 50ms một lần
-- [ ] Group theo ngày/tháng/năm/không — header đúng, đếm đúng
-- [ ] Scrubber: kéo từ đầu tới cuối thư viện mượt, nhãn năm cập nhật theo
-- [ ] Toàn bộ phím tắt hoạt động; `?` mở bảng; gõ trong ô lọc không kích hoạt phím tắt
-- [ ] `Esc` phân cấp đúng thứ tự: lightbox → bỏ chọn → xoá lọc
-- [ ] Lọc rồi tải lại trang (URL hash) → giữ nguyên bộ lọc
-- [ ] Lọc không khớp gì → empty state nêu rõ bộ lọc đang áp + nút xoá một click
+- [x] Lọc 70k → kết quả hiển thị <100ms (đo bằng Playwright, không phải cảm nhận)
+- [x] Kết hợp 4 loại filter cùng lúc vẫn <100ms
+- [x] Đổi sort trên 70k không chặn main thread quá 50ms một lần
+- [x] Group theo ngày/tháng/năm/không — header đúng, đếm đúng
+- [x] Scrubber: kéo từ đầu tới cuối thư viện mượt, nhãn năm cập nhật theo
+- [x] Toàn bộ phím tắt hoạt động; `?` mở bảng; gõ trong ô lọc không kích hoạt phím tắt
+- [x] `Esc` phân cấp đúng thứ tự: lightbox → bỏ chọn → xoá lọc
+- [x] Lọc rồi tải lại trang (URL hash) → giữ nguyên bộ lọc
+- [x] Lọc không khớp gì → empty state nêu rõ bộ lọc đang áp + nút xoá một click
+
+## Kết quả thực tế
+
+**Không có Web Worker.** Plan bảo đo trước, và số đo bác bỏ nhu cầu: trên 70k item,
+lọc thuần 3ms, lọc + layout + render 29ms, sort theo tên 25ms, theo ngày 39ms —
+đều dưới ngưỡng 50ms plan đặt ra. Kèm theo đó bỏ luôn chỉ số `Map<dir, id[]>` dựng
+sẵn: quét tuyến tính đã là 3ms.
+
+**Không có `help-sheet.js`.** `<dialog>` native đã có focus trap, backdrop và Esc;
+bảng phím tắt là markup tĩnh trong `index.html`, bật bằng một dòng `showModal()`.
+Cũng vậy với "nhảy tới ngày": `showPicker()` của `<input type="date">` thay cho lịch tự vẽ.
+
+**Số đo (Playwright, Chrome, 70k item):**
+
+| Thao tác | Thời gian |
+|---|---|
+| Lọc theo loại (63.642 kết quả), gồm layout + render | 29ms |
+| Bốn filter kết hợp (201 kết quả) | 5,5ms |
+| Đổi sort sang tên | 25ms |
+| Đổi sort sang ngày | 39ms |
+| Riêng `applyFilters` | 3ms |
+| DOM node lúc cao nhất | 55 |
+
+**Không rò rỉ JS:** cuộn qua ~10.000 ảnh rồi lọc còn 1 → heap JS 51,6MB → 16,4MB.
+
+**Một bug Phase 5 lộ ra:** `.hdr` có `display: flex`, đè lên `display: none` mặc định
+của thuộc tính `[hidden]` — header của nhóm đã bị lọc mất vẫn nằm lại trên lưới.
+Chỉ thấy được khi có bộ lọc làm nhóm biến mất.
+
+**Đơn giản hoá có chủ ý:** panel thư mục là danh sách thụt lề theo độ sâu, không có
+nút thu gọn từng nhánh — danh sách đã cuộn được và đã hiện số mục mỗi nhánh, thu gọn
+chỉ thêm trạng thái mà không thêm thông tin.
 
 ## Risk Assessment
 

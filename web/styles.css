@@ -12,6 +12,9 @@
   --r-thumb: 2px;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
   --topbar: 52px;
+  --fbar: 44px;
+  --bars: 96px; /* topbar + fbar */
+  --side: 232px;
   /* Ảnh cần nền trung tính tối để mắt đọc đúng màu, kể cả khi app là light mode */
   --bg-immersive: #0b0b0d;
 }
@@ -123,10 +126,191 @@ button {
   font-weight: 530;
 }
 
+/* ---------- thanh lọc ---------- */
+.fbar {
+  position: fixed;
+  inset: var(--topbar) 0 auto 0;
+  height: var(--fbar);
+  z-index: 39;
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  backdrop-filter: saturate(1.6) blur(12px);
+  border-bottom: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  font-size: 13px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+/* Thanh này cuộn ngang khi cửa sổ hẹp: co các nút lại làm nhãn xuống dòng và
+   thanh cao gấp đôi, xấu hơn nhiều so với cuộn. */
+.fbar > * {
+  flex: none;
+}
+.fbar .seg button {
+  padding: 4px 9px;
+  white-space: nowrap;
+}
+.fld {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--fg-tertiary);
+  white-space: nowrap;
+}
+.fbar input,
+.fbar select {
+  font: inherit;
+  color: var(--fg-primary);
+  background: var(--bg-sunken);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 4px 7px;
+}
+.fbar input[type='number'] {
+  width: 62px;
+}
+.fbar input[type='search'] {
+  width: 150px;
+}
+.fbar select:disabled {
+  color: var(--fg-disabled);
+}
+.clr {
+  padding: 5px 11px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 530;
+  background: var(--bg-sunken);
+  color: var(--fg-primary);
+  white-space: nowrap;
+}
+.clr:hover {
+  background: var(--border-strong);
+}
+/* Chỉ tồn tại để mở date picker native bằng phím G */
+.vh {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- panel thư mục ---------- */
+.side {
+  position: fixed;
+  inset: var(--bars) auto 0 0;
+  width: var(--side);
+  z-index: 30;
+  overflow-y: auto;
+  padding: 8px 0 20px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-strong);
+}
+body.side-on #scroller {
+  left: var(--side);
+}
+body.side-on .stickhdr {
+  left: var(--side);
+}
+.dir {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 10px;
+  font-size: 13px;
+  text-align: left;
+  color: var(--fg-secondary);
+}
+.dir em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 11px;
+  color: var(--fg-disabled);
+}
+.dir:hover {
+  background: var(--bg-sunken);
+}
+.dir[aria-pressed='true'] {
+  color: var(--accent);
+  font-weight: 560;
+}
+
+/* ---------- thanh năm ---------- */
+.scrub {
+  position: fixed;
+  top: var(--bars);
+  bottom: 0;
+  right: 0;
+  width: 54px;
+  z-index: 25;
+  opacity: 0;
+  transition: opacity 0.2s;
+  touch-action: none;
+}
+.scrub.on {
+  opacity: 1;
+}
+.tick {
+  position: absolute;
+  right: 6px;
+  transform: translateY(-50%);
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 560;
+  color: var(--fg-tertiary);
+  background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+}
+.tick:hover {
+  color: var(--accent);
+}
+
+/* ---------- bảng phím tắt ---------- */
+dialog {
+  border: 0;
+  border-radius: 14px;
+  padding: 22px 26px;
+  color: var(--fg-primary);
+  background: var(--bg-surface);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.32);
+}
+dialog h2 {
+  font-size: 17px;
+  margin-bottom: 12px;
+}
+dialog td {
+  padding: 3px 14px 3px 0;
+  font-size: 13px;
+  color: var(--fg-secondary);
+}
+dialog p {
+  margin: 12px 0;
+  font-size: 12px;
+  color: var(--fg-tertiary);
+}
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font: 11px/1.6 ui-monospace, monospace;
+  text-align: center;
+  color: var(--fg-primary);
+}
+
 /* Tiến trình quét là một sợi chỉ, không bao giờ là modal chặn màn hình */
 .scan {
   position: fixed;
-  top: var(--topbar);
+  top: var(--bars);
   left: 0;
   height: 2px;
   z-index: 41;
@@ -137,7 +321,8 @@ button {
 /* ---------- lưới ---------- */
 #scroller {
   position: absolute;
-  inset: var(--topbar) 0 0 0;
+  inset: var(--bars) 0 0 0;
+  transition: left 0.16s;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -219,6 +404,11 @@ button {
   font-weight: 600;
   letter-spacing: -0.02em;
 }
+/* `display: flex` đè lên `display: none` mặc định của [hidden] — không có dòng
+   này thì header của nhóm đã bị lọc mất vẫn nằm lại trên lưới. */
+.hdr[hidden] {
+  display: none;
+}
 .hdr em {
   font-style: normal;
   font-size: 13px;
@@ -227,7 +417,7 @@ button {
 }
 .stickhdr {
   position: fixed;
-  top: var(--topbar);
+  top: var(--bars);
   left: 0;
   right: 0;
   z-index: 20;

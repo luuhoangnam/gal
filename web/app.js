@@ -1,4 +1,15 @@
 import { createGrid, yieldToMain, DEFAULT_TARGET } from './grid.js';
+import { createScrubber } from './scrubber.js';
+import { bindKeyboard } from './keyboard.js';
+import {
+  DEFAULTS,
+  applyFilters,
+  describe,
+  folders,
+  fromHash,
+  isFiltered,
+  toHash,
+} from './filters.js';
 
 const $ = (s) => document.querySelector(s);
 const fmtN = (n) => n.toLocaleString('vi-VN');
@@ -21,6 +32,8 @@ const grid = createGrid({
   onOpen: (index) => openLightbox(index),
 });
 
+const scrubber = createScrubber({ el: $('#scrub'), scroller, grid });
+
 // PhotoSwipe chỉ tải khi người dùng thật sự mở ảnh đầu tiên — lưới hiện ra
 // không phải chờ nó.
 let lightbox = null;
@@ -32,8 +45,9 @@ async function openLightbox(index) {
   lightbox.open(index);
 }
 
-// ---------- trạng thái dữ liệu ----------
+// ---------- trạng thái ----------
 const items = new Map(); // id -> item
+let criteria = { ...DEFAULTS, ...fromHash(location.hash) };
 let dirty = false;
 let scheduled = false;
 let scanned = 0;
@@ -51,6 +65,7 @@ function ingest(o) {
     name: o.p.slice(o.p.lastIndexOf('/') + 1),
     v: o.v === 1,
     k: o.k,
+    s: o.s ?? 0,
     ar: 0,
     w: 0,
     h: 0,
@@ -75,12 +90,18 @@ function ingest(o) {
   items.set(i, it);
 }
 
-/** Sắp xếp giống server (`taken DESC, id DESC`) để thứ tự không đổi giữa hai nguồn. */
+/** Nhóm theo ngày chỉ có nghĩa khi view đang xếp theo ngày. */
+const effectiveGroup = () => (criteria.sort === 'date' ? criteria.group : 'none');
+
 function rebuild() {
   dirty = false;
-  const view = [...items.values()].sort((a, b) => b.t - a.t || b.i - a.i);
-  grid.setView(view);
+  grid.setGroup(effectiveGroup());
+  grid.setView(applyFilters(items.values(), criteria));
+  scrubber.build();
+  // Thanh năm chỉ đúng khi thứ tự là thời gian; xếp theo tên thì năm nhảy loạn.
+  $('#scrub').hidden = criteria.sort !== 'date' || grid.count < 2;
   updateStatus();
+  updateEmpty();
 }
 
 /**
@@ -107,7 +128,7 @@ function updateStatus() {
   if (phase === 'done') {
     bar.style.width = '100%';
     bar.style.opacity = '0';
-    $('#sub').textContent = `— ${fmtN(grid.count)} mục`;
+    $('#sub').textContent = `— ${fmtN(items.size)} mục`;
     return;
   }
   const p = phase === 'a' ? 0.5 : 0.5 + (scanned > 0 ? (metaDone / scanned) * 0.5 : 0);
@@ -116,7 +137,19 @@ function updateStatus() {
     phase === 'a' ? `— đang quét… ${fmtN(items.size)} mục` : '— đang đọc ngày chụp…';
 }
 
-$('#empty').classList.remove('on');
+function updateEmpty() {
+  const filtered = isFiltered(criteria);
+  const none = grid.count === 0;
+  $('#empty').classList.toggle('on', none && phase === 'done');
+  $('#emptytitle').textContent = filtered
+    ? 'Không có mục nào khớp bộ lọc'
+    : 'Không tìm thấy ảnh hay video nào';
+  $('#emptysub').textContent = filtered
+    ? `Đang lọc: ${describe(criteria)}`
+    : 'Thư mục này và mọi thư mục con đều trống.';
+  $('#emptyclear').hidden = !filtered;
+  $('#clear').hidden = !filtered;
+}
 
 // ---------- ingest NDJSON ----------
 async function scan() {
@@ -142,9 +175,8 @@ async function scan() {
     }
   }
   phase = 'done';
-  if (dirty) rebuild();
-  else updateStatus();
-  if (items.size === 0) $('#empty').classList.add('on');
+  rebuild();
+  renderFolders();
 }
 
 function handle(msg) {
@@ -159,9 +191,11 @@ function handle(msg) {
     case 'done_a':
       scanned = msg.n;
       phase = 'b';
+      renderFolders();
       break;
     case 'done_cache':
       rebuild();
+      renderFolders();
       break;
     case 'done_b':
       phase = 'done';
@@ -175,6 +209,57 @@ function fail(text) {
   $('#scan').style.opacity = '0';
 }
 
+// ---------- bộ lọc ----------
+function setCriteria(patch, { relayoutSide = false } = {}) {
+  criteria = { ...criteria, ...patch };
+  history.replaceState(null, '', toHash(criteria) || location.pathname);
+  syncControls();
+  rebuild();
+  if (relayoutSide) grid.relayout(8);
+}
+
+function syncControls() {
+  $('#q').value = criteria.q;
+  $('#from').value = criteria.from;
+  $('#to').value = criteria.to;
+  $('#minmb').value = criteria.minMB || '';
+  $('#maxmb').value = criteria.maxMB || '';
+  $('#sort').value = criteria.sort;
+  $('#group').value = criteria.group;
+  $('#asc').textContent = criteria.asc ? '↑' : '↓';
+  $('#group').disabled = criteria.sort !== 'date';
+  for (const b of document.querySelectorAll('[data-type]')) {
+    b.setAttribute('aria-pressed', String(b.dataset.type === criteria.type));
+  }
+  for (const b of document.querySelectorAll('.dir')) {
+    b.setAttribute('aria-pressed', String(b.dataset.dir === criteria.dir));
+  }
+}
+
+/**
+ * Cây thư mục: danh sách thụt lề theo độ sâu, không có nút thu gọn.
+ * ponytail: thu gọn/mở rộng thêm trạng thái cho mỗi nhánh mà không cho biết
+ * thêm thông tin gì — danh sách đã cuộn được và đã hiện số mục mỗi nhánh.
+ */
+function renderFolders() {
+  const list = folders(items.values());
+  $('#dirs').replaceChildren(
+    ...list.map((d) => {
+      const b = document.createElement('button');
+      b.className = 'dir';
+      b.dataset.dir = d.path;
+      b.style.paddingLeft = `${10 + d.depth * 12}px`;
+      b.setAttribute('aria-pressed', String(d.path === criteria.dir));
+      b.append(
+        d.path.slice(d.path.lastIndexOf('/') + 1),
+        Object.assign(document.createElement('em'), { textContent: fmtN(d.count) }),
+      );
+      b.onclick = () => setCriteria({ dir: d.path });
+      return b;
+    }),
+  );
+}
+
 // ---------- điều khiển ----------
 function setMode(m) {
   grid.setMode(m);
@@ -182,32 +267,86 @@ function setMode(m) {
     b.setAttribute('aria-pressed', String(b.dataset.mode === m));
   }
 }
-
 for (const b of document.querySelectorAll('[data-mode]')) {
   b.onclick = () => setMode(b.dataset.mode);
 }
+
 function setTarget(t) {
-  grid.setTarget(t);
+  grid.setTarget(t || DEFAULT_TARGET);
   $('#reset').textContent = `${Math.round((grid.target / DEFAULT_TARGET) * 100)}%`;
 }
 $('#plus').onclick = () => setTarget(grid.target * 1.25);
 $('#minus').onclick = () => setTarget(grid.target / 1.25);
-$('#reset').onclick = () => setTarget(DEFAULT_TARGET);
+$('#reset').onclick = () => setTarget(0);
 
-addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
-  if (lightbox?.isOpen()) return; // lightbox tự lo phím của nó
-  if (e.key === '+' || e.key === '=') setTarget(grid.target * 1.25);
-  else if (e.key === '-') setTarget(grid.target / 1.25);
-  else if (e.key === '0') setTarget(DEFAULT_TARGET);
-  else if (e.key === '1') setMode('justified');
-  else if (e.key === '2') setMode('square');
-  else if (e.key === '3') setMode('masonry');
-  else if (e.key === 'Home') scroller.scrollTop = 0;
-  else if (e.key === 'End') scroller.scrollTop = sizer.offsetHeight;
-  else return;
-  e.preventDefault();
+for (const b of document.querySelectorAll('[data-type]')) {
+  b.onclick = () => setCriteria({ type: b.dataset.type });
+}
+$('#from').onchange = () => setCriteria({ from: $('#from').value });
+$('#to').onchange = () => setCriteria({ to: $('#to').value });
+$('#minmb').onchange = () => setCriteria({ minMB: Number($('#minmb').value) || 0 });
+$('#maxmb').onchange = () => setCriteria({ maxMB: Number($('#maxmb').value) || 0 });
+$('#sort').onchange = () => setCriteria({ sort: $('#sort').value });
+$('#group').onchange = () => setCriteria({ group: $('#group').value });
+$('#asc').onclick = () => setCriteria({ asc: !criteria.asc });
+
+// Lọc theo tên có debounce: chạy lại 70k mỗi lần gõ phím là nguồn jank thật sự
+let qTimer = 0;
+$('#q').oninput = () => {
+  clearTimeout(qTimer);
+  qTimer = setTimeout(() => setCriteria({ q: $('#q').value }), 80);
+};
+
+const clearFilters = () =>
+  setCriteria({ type: 'all', dir: '', from: '', to: '', minMB: 0, maxMB: 0, q: '' });
+$('#clear').onclick = clearFilters;
+$('#emptyclear').onclick = clearFilters;
+for (const b of document.querySelectorAll('#side > .dir')) {
+  b.onclick = () => setCriteria({ dir: '' });
+}
+
+$('#sidetoggle').onclick = () => {
+  const open = $('#side').hidden;
+  $('#side').hidden = !open;
+  $('#sidetoggle').setAttribute('aria-pressed', String(open));
+  document.body.classList.toggle('side-on', open);
+  grid.relayout(8); // bề rộng lưới đổi → phải xếp lại, giữ nguyên ô đang xem
+};
+
+$('#helpbtn').onclick = () => $('#help').showModal();
+
+// Nhảy tới ngày: dùng luôn date picker native thay vì tự vẽ lịch
+const goto_ = $('#goto');
+goto_.onchange = () => {
+  const t = new Date(goto_.value).getTime();
+  if (!Number.isFinite(t)) return;
+  // View xếp giảm dần theo ngày → ô đầu tiên có t <= mốc chọn
+  const i = grid.placed.findIndex((p) => (criteria.asc ? p.o.t >= t : p.o.t <= t));
+  if (i >= 0) grid.focusIndex(i);
+};
+
+bindKeyboard({
+  grid,
+  lightbox: () => lightbox,
+  help: $('#help'),
+  actions: {
+    open: openLightbox,
+    mode: setMode,
+    density: (f) => setTarget(f === 0 ? 0 : grid.target * f),
+    isFiltered: () => isFiltered(criteria),
+    clearFilters,
+    focusFilter: () => $('#q').focus(),
+    jumpToDate: () => (goto_.showPicker ? goto_.showPicker() : goto_.focus()),
+  },
 });
 
-window.__gal = { grid, items };
+addEventListener('hashchange', () => {
+  criteria = { ...DEFAULTS, ...fromHash(location.hash) };
+  syncControls();
+  rebuild();
+});
+
+syncControls();
+setTarget(0);
+window.__gal = { grid, items, get criteria() { return criteria; }, setCriteria, applyFilters };
 scan();

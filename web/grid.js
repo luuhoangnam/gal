@@ -16,8 +16,10 @@ export const yieldToMain = globalThis.scheduler?.postTask
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 
 const fmtDur = (s) => `${(s / 60) | 0}:${String(Math.round(s % 60)).padStart(2, '0')}`;
-const fmtDay = (t) => {
+const fmtHead = (t, group) => {
   const d = new Date(t);
+  if (group === 'year') return String(d.getFullYear());
+  if (group === 'month') return `Tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
   return `${d.getDate()} tháng ${d.getMonth() + 1}, ${d.getFullYear()}`;
 };
 
@@ -27,6 +29,7 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
   let view = [];
   let mode = 'justified';
   let target = DEFAULT_TARGET;
+  let group = 'day';
   let placed = [];
   let heads = [];
   let byId = new Map();
@@ -57,6 +60,7 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
       mode,
       width: scroller.clientWidth - PAD * 2,
       target,
+      group,
     }));
     sizer.style.height = `${totalH}px`;
 
@@ -161,7 +165,7 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
       el.hidden = false;
       el.style.transform = `translate(${PAD}px,${h.y}px)`;
       el.style.width = `${w}px`;
-      el.innerHTML = `${fmtDay(h.t)} <em>${h.n.toLocaleString('vi-VN')} mục</em>`;
+      el.innerHTML = `${fmtHead(h.t, group)} <em>${h.n.toLocaleString('vi-VN')} mục</em>`;
       n++;
     }
     for (let i = n; i < headPool.length; i++) headPool[i].hidden = true;
@@ -173,7 +177,7 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
       if (h.y <= top + 46) cur = h;
       else break;
     }
-    stick.textContent = cur ? fmtDay(cur.t) : '';
+    stick.textContent = cur ? fmtHead(cur.t, group) : '';
     stick.classList.toggle('on', cur !== null && top > 40);
   }
 
@@ -253,8 +257,71 @@ export function createGrid({ scroller, sizer, stick, onViewport, onOpen }) {
       target = next;
       relayout(scroller.clientHeight / 2);
     },
+    setGroup(g) {
+      if (g === group) return;
+      group = g;
+      relayout(8);
+    },
     relayout,
     render,
+    /** Mốc thời gian + vị trí y, cho thanh scrubber. */
+    get marks() {
+      return heads;
+    },
+    get totalH() {
+      return totalH;
+    },
+    scrollTo(y) {
+      scroller.scrollTop = Math.max(0, Math.min(totalH, y));
+      render();
+    },
+    /**
+     * Di chuyển ô đang focus. ←/→ đi theo thứ tự view; ↑/↓ tìm ô gần nhất theo
+     * TÂM NGANG ở hàng trên/dưới — justified có số ô mỗi hàng khác nhau nên
+     * cộng/trừ một hằng số sẽ nhảy lung tung.
+     */
+    moveFocus(key) {
+      if (placed.length === 0) return;
+      const cur = document.activeElement?.closest?.('.tile');
+      const i = cur ? byId.get(Number(cur.dataset.id)) : undefined;
+      if (i === undefined) return void this.focusIndex(0);
+
+      if (key === 'ArrowRight') return void this.focusIndex(Math.min(placed.length - 1, i + 1));
+      if (key === 'ArrowLeft') return void this.focusIndex(Math.max(0, i - 1));
+
+      const p = placed[i];
+      const cx = p.x + p.w / 2;
+      const up = key === 'ArrowUp';
+      let best = -1;
+      let bestDx = Infinity;
+      // Hàng kế tiếp = ô đầu tiên có y khác hẳn y hiện tại theo đúng chiều
+      for (let j = i; up ? j >= 0 : j < placed.length; up ? j-- : j++) {
+        const q = placed[j];
+        if (up ? q.y >= p.y : q.y <= p.y) continue;
+        if (best >= 0 && q.y !== placed[best].y) break;
+        const dx = Math.abs(q.x + q.w / 2 - cx);
+        if (dx < bestDx) {
+          bestDx = dx;
+          best = j;
+        }
+      }
+      if (best >= 0) this.focusIndex(best);
+    },
+    focusIndex(i) {
+      const p = placed[i];
+      if (!p) return;
+      const top = scroller.scrollTop;
+      if (p.y < top + 8 || p.y + p.h > top + scroller.clientHeight) {
+        scroller.scrollTop = p.y - scroller.clientHeight / 2 + p.h / 2;
+      }
+      render();
+      bound.get(p.o.i)?.focus({ preventScroll: true });
+    },
+    /** Ô đang focus, cho phím Space/Enter mở lightbox từ handler tập trung. */
+    focusedIndex() {
+      const el = document.activeElement?.closest?.('.tile');
+      return el ? byId.get(Number(el.dataset.id)) : undefined;
+    },
     /** Item ở vị trí hiển thị `i` — lightbox đi theo đúng thứ tự mắt thấy. */
     at: (i) => placed[i]?.o,
     /**

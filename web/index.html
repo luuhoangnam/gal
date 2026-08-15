@@ -9,6 +9,9 @@
   </head>
   <body>
     <div class="bar">
+      <button class="icobtn" id="sidetoggle" aria-label="Thư mục" aria-pressed="false" title="Thư mục">
+        ☰
+      </button>
       <div class="path"><b>gal</b><span id="sub">— đang quét…</span></div>
       <div class="spacer"></div>
       <span class="count" id="cnt"></span>
@@ -22,20 +25,82 @@
         100%
       </button>
       <button class="icobtn" id="plus" aria-label="Tăng mật độ" title="Lớn hơn (+)">+</button>
+      <button class="icobtn" id="helpbtn" aria-label="Phím tắt" title="Phím tắt (?)">?</button>
+    </div>
+
+    <div class="fbar">
+      <input id="q" type="search" placeholder="Lọc theo tên… (/)" aria-label="Lọc theo tên" />
+      <div class="seg" role="group" aria-label="Loại">
+        <button data-type="all" aria-pressed="true">Tất cả</button>
+        <button data-type="image" aria-pressed="false">Ảnh</button>
+        <button data-type="video" aria-pressed="false">Video</button>
+      </div>
+      <label class="fld">Từ <input type="date" id="from" /></label>
+      <label class="fld">Đến <input type="date" id="to" /></label>
+      <label class="fld">
+        MB
+        <input type="number" id="minmb" min="0" step="1" placeholder="≥ MB" />
+        <input type="number" id="maxmb" min="0" step="1" placeholder="≤ MB" />
+      </label>
+      <label class="fld">
+        Xếp
+        <select id="sort">
+          <option value="date">Ngày chụp</option>
+          <option value="name">Tên</option>
+          <option value="size">Dung lượng</option>
+        </select>
+      </label>
+      <button class="icobtn" id="asc" aria-label="Đảo chiều sắp xếp" title="Đảo chiều">↓</button>
+      <label class="fld">
+        Nhóm
+        <select id="group">
+          <option value="day">Ngày</option>
+          <option value="month">Tháng</option>
+          <option value="year">Năm</option>
+          <option value="none">Không</option>
+        </select>
+      </label>
+      <button class="clr" id="clear" hidden>Xoá lọc</button>
+      <!-- Chỉ để mở date picker native bằng phím G; không hiện trên thanh -->
+      <input type="date" id="goto" class="vh" aria-label="Nhảy tới ngày" />
     </div>
 
     <div class="scan" id="scan" style="width: 0"></div>
     <div class="stickhdr" id="stick" aria-hidden="true"></div>
 
+    <aside class="side" id="side" hidden aria-label="Thư mục">
+      <button class="dir" data-dir="" aria-pressed="true">Tất cả thư mục</button>
+      <div id="dirs"></div>
+    </aside>
+
     <div id="scroller" tabindex="0">
       <div id="sizer" role="list" aria-label="Ảnh và video"></div>
       <div class="empty" id="empty">
         <div>
-          <b>Không tìm thấy ảnh hay video nào</b>
-          Thư mục này và mọi thư mục con đều trống.
+          <b id="emptytitle">Không tìm thấy ảnh hay video nào</b>
+          <span id="emptysub">Thư mục này và mọi thư mục con đều trống.</span>
+          <button class="clr" id="emptyclear" hidden>Xoá lọc</button>
         </div>
       </div>
+      <div class="scrub" id="scrub" aria-hidden="true"></div>
     </div>
+
+    <dialog id="help">
+      <h2>Phím tắt</h2>
+      <table>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>↑</kbd> <kbd>↓</kbd></td><td>di chuyển ô chọn</td></tr>
+        <tr><td><kbd>Space</kbd> / <kbd>Enter</kbd></td><td>mở ảnh, phát video</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>đóng → bỏ chọn → xoá lọc</td></tr>
+        <tr><td><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></td><td>mật độ lưới, về mặc định</td></tr>
+        <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd></td><td>justified / ô vuông / masonry</td></tr>
+        <tr><td><kbd>G</kbd></td><td>nhảy tới ngày</td></tr>
+        <tr><td><kbd>/</kbd></td><td>vào ô lọc theo tên</td></tr>
+        <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>đầu / cuối thư viện</td></tr>
+        <tr><td><kbd>?</kbd></td><td>bảng này</td></tr>
+      </table>
+      <p>Mọi thứ ở đây đều làm được bằng chuột — phím tắt chỉ để nhanh hơn.</p>
+      <form method="dialog"><button class="clr">Đóng</button></form>
+    </dialog>
 
     <script type="module" src="/app.js"></script>
   </body>

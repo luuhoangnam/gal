@@ -14,6 +14,18 @@ const DAY = 864e5;
 export const dayKey = (t) => Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / DAY);
 
 /**
+ * Khoá nhóm theo chế độ. `none` trả cùng một khoá cho mọi item → đúng một nhóm,
+ * và nhóm đó không vẽ header (xem `layout`).
+ */
+export function groupKey(t, mode) {
+  if (mode === 'none') return 0;
+  const d = new Date(t);
+  if (mode === 'year') return d.getFullYear();
+  if (mode === 'month') return d.getFullYear() * 12 + d.getMonth();
+  return dayKey(t);
+}
+
+/**
  * Tỉ lệ dùng để TÍNH layout bị kẹp: một ảnh panorama 10:1 kéo cả hàng justified
  * lùn xuống còn W/10. Ô vẫn `object-fit: cover` nên ảnh chỉ bị cắt, không méo.
  */
@@ -25,19 +37,21 @@ const arOf = (o) => (o.ar ? Math.min(AR_MAX, Math.max(AR_MIN, o.ar)) : 1);
  * @param {Array} view - đã sắp xếp, mỗi item có `{ i, ar, t }`
  * @returns {{placed: Array, heads: Array, byId: Map, totalH: number}}
  */
-export function layout(view, { mode = 'justified', width, target = 190 } = {}) {
+export function layout(view, { mode = 'justified', width, target = 190, group = 'day' } = {}) {
   const W = Math.max(80, width);
   const placed = [];
   const heads = [];
   let y = 8;
 
   for (let s = 0; s < view.length; ) {
-    const k = dayKey(view[s].t);
+    const k = groupKey(view[s].t, group);
     let e = s;
-    while (e < view.length && dayKey(view[e].t) === k) e++;
+    while (e < view.length && groupKey(view[e].t, group) === k) e++;
 
-    heads.push({ y, h: HDR_H, t: view[s].t, n: e - s });
-    y += HDR_H;
+    if (group !== 'none') {
+      heads.push({ y, h: HDR_H, t: view[s].t, n: e - s });
+      y += HDR_H;
+    }
 
     const from = placed.length;
     if (mode === 'square') y = rowsSquare(view, s, e, W, target, placed, y);
