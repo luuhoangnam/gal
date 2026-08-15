@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { stat } from 'node:fs/promises';
-import { spawn } from 'node:child_process';
 import { createServer } from './server.js';
 
 const USAGE = `gal <thư mục> [tuỳ chọn]
@@ -29,15 +28,6 @@ export function parseArgs(argv) {
     else positional.push(a);
   }
   return { opts, positional };
-}
-
-/** Mở Chrome cụ thể, không phải browser mặc định — v1 chỉ nhắm Chrome. */
-function openChrome(url) {
-  return new Promise((resolve) => {
-    const p = spawn('open', ['-a', 'Google Chrome', url], { stdio: 'ignore' });
-    p.on('error', () => resolve(false));
-    p.on('exit', (code) => resolve(code === 0));
-  });
 }
 
 export async function main(argv) {
@@ -103,8 +93,4 @@ export async function main(argv) {
       console.log(`Cache thumbnail đang dùng ${(bytes / 1024 ** 3).toFixed(1)}GB tại ${server.thumbs.dir}`);
     }
   });
-
-  if (!(await openChrome(url))) {
-    console.log('Không mở được Google Chrome — v1 nhắm Chrome. Mở URL trên thủ công.');
-  }
 }

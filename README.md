@@ -16,7 +16,7 @@ $ gal ~/Pictures
 http://127.0.0.1:53411
 ```
 
-<!-- DEMO: replace with a 10s screen recording of `gal ~/Pictures` -> browser opens -> scroll 70k items -->
+<!-- DEMO: replace with a 10s screen recording of `gal ~/Pictures` -> click the URL -> scroll 70k items -->
 <p align="center"><i>Demo recording coming — see <a href="docs/wireframe/">docs/wireframe/</a> for the interaction design.</i></p>
 
 Your photos are already on disk, organized in folders you made years ago. `gal` points a
@@ -48,7 +48,7 @@ Not on npm yet — see [Status](#status).
 ## Usage
 
 ```sh
-gal ~/Pictures                 # open the gallery in Chrome
+gal ~/Pictures                 # prints the URL, click it to open
 gal . --port 8080              # fixed port instead of a random free one
 gal ~/Photos --lan             # let phones and laptops on your Wi-Fi browse it
 gal ~/Pictures --follow-symlinks
@@ -96,7 +96,7 @@ streaming scan, EXIF metadata, SQLite index, thumbnail pipeline, virtualized gri
 Not done yet: lightbox and video playback, filter/sort/group UI, accessibility polish, npm
 packaging. Chrome only for now. Roadmap lives in [`plans/`](plans/).
 
-`npm test` — 72 tests, no framework, just `node --test`.
+`npm test` — 94 tests, no framework, just `node --test`.
 
 ## Contributing
 

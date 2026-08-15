@@ -59,6 +59,10 @@ export function isLoopback(host) {
   return host === '127.0.0.1' || host === 'localhost' || host === '::1';
 }
 
+export function isWildcard(host) {
+  return host === '0.0.0.0' || host === '::';
+}
+
 /**
  * Lớp 2 — Host guard, chặn DNS rebinding. Port ngẫu nhiên một mình không đủ:
  * trang độc hại rebind evil.com → 127.0.0.1, và same-origin policy so hostname
@@ -267,7 +271,9 @@ export function createServer(
         server.listen(wantPort, host, () => {
           port = server.address().port;
           resolve({
-            url: `http://${isLoopback(host) ? '127.0.0.1' : host}:${port}`,
+            // 0.0.0.0/:: là "mọi giao diện", không phải địa chỉ gõ được vào trình
+            // duyệt — từ chính máy này luôn vào bằng loopback
+            url: `http://${isLoopback(host) || isWildcard(host) ? '127.0.0.1' : host}:${port}`,
             // URL để gõ từ máy khác trong LAN; rỗng khi chỉ bind loopback
             lanUrls: exposed
               ? names

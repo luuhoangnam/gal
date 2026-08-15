@@ -110,6 +110,17 @@ test('mặc định chỉ bind loopback', () => {
   assert.deepEqual(localHostnames(false), ['127.0.0.1', 'localhost', '[::1]']);
 });
 
+test('bind 0.0.0.0: URL in ra là loopback, không phải 0.0.0.0 (không gõ được)', async () => {
+  const s = createServer(base, { cacheDir, host: '0.0.0.0' });
+  const { url, lanUrls } = await s.listen();
+  try {
+    assert.match(url, /^http:\/\/127\.0\.0\.1:\d+$/);
+    assert.ok(!lanUrls.some((u) => u.includes('0.0.0.0')));
+  } finally {
+    s.server.close();
+  }
+});
+
 test('--lan: bind mọi interface, chấp nhận Host là IP LAN thật', async () => {
   const s = createServer(base, { cacheDir, host: '0.0.0.0' });
   const { url: lanBase, lanUrls } = await s.listen();
