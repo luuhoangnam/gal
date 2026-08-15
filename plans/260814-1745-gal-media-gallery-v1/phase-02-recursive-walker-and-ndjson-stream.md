@@ -1,7 +1,7 @@
 ---
 phase: 2
 title: "Walker đệ quy + NDJSON stream"
-status: pending
+status: completed
 priority: P1
 effort: "1d"
 dependencies: [1]
@@ -85,19 +85,42 @@ cấu trúc thư mục máy ra ngoài response.
 
 ## Success Criteria
 
-- [ ] Walk `~/Pictures` (70k file) hoàn tất <1s, đếm khớp `find`
-- [ ] Symlink trỏ về thư mục cha → không lặp vô hạn, test chứng minh
-- [ ] Thư mục `chmod 000` → bị bỏ qua, scan vẫn chạy tiếp, `skipped` tăng
-- [ ] `.photoslibrary` bị bỏ qua mặc định; `--include-bundles` thì quét vào
-- [ ] Tên file có emoji và dấu tiếng Việt → không hỏng, không mojibake
-- [ ] Client nhận được lô đầu tiên trước khi scan xong (test bằng timestamp lô đầu so với `done_a`)
-- [ ] `curl <url>/api/scan` in ra NDJSON hợp lệ từng dòng
+- [x] Walk `~/Pictures` (70k file) hoàn tất <1s, đếm khớp `find`
+      — **615-646ms**, 70.822 mục, khớp đúng con số `find -iname` theo cùng danh sách đuôi
+- [x] Symlink trỏ về thư mục cha → không lặp vô hạn, test chứng minh
+- [x] Thư mục `chmod 000` → bị bỏ qua, scan vẫn chạy tiếp, `skipped` tăng
+- [x] `.photoslibrary` bị bỏ qua mặc định; `--include-bundles` thì quét vào
+- [x] Tên file có emoji và dấu tiếng Việt → không hỏng, không mojibake
+- [x] Client nhận được lô đầu tiên trước khi scan xong — **chunk đầu 2ms, `done_a` 567ms**
+- [x] `curl <url>/api/scan` in ra NDJSON hợp lệ từng dòng (143 dòng trên thư viện thật)
+
+## Ghi chú thực hiện
+
+- **`i` (rowid) chưa có trong pha A.** Item hiện chỉ mang `p`, `s`, `m`, `v`. Rowid là của
+  SQLite nên chỉ tồn tại được từ Phase 3; gán số đếm tạm ở đây đúng là lỗi mà plan cảnh báo
+  (thêm/xoá file → id dịch). Chưa client nào tiêu thụ nên hoãn không tốn gì.
+- **"Một scan cho mỗi root" hoãn sang Phase 3** vì lý do tương tự: DB mới là trạng thái chung
+  tự nhiên để request thứ hai gắn vào. Hiện mỗi request chạy walker riêng, chưa có id nên vô hại.
+- **Nút thắt pha A là `lstat`, không phải `readdir`.** Đo trên 135k file: `readdir` một mình
+  296ms, `lstat` tuần tự 2.859ms, `lstat` song song 16 chỉ 432ms (64 và 256 không nhanh thêm).
+  Bản đầu tuần tự cho 3.570ms — trượt tiêu chí. Sửa: stat theo lô 64 trong từng thư mục
+  (`STAT_BATCH`), giữ nguyên hình dạng generator. 3.570ms → 620ms.
+  Plan đoán phải song song hoá `readdir`; số đo nói ngược lại — chỉ 4.408 thư mục cho 70k file.
+- **`--follow-symlinks` giữ được tính nhất quán hai lớp**: walker báo mọi thư mục nó đi vào
+  ngoài root qua `onExtraRoot`, server đưa vào vùng cho phép của `/api/file`. Không có cơ chế này
+  thì cờ tự mâu thuẫn — index có mục mà mở ra 403, đúng như red team chỉ.
+- `--host` / `--port` thêm ở CLI (yêu cầu chủ dự án). `--port` cố định làm việc trùng cache giữa
+  các root thành tất định — đúng lý do URL thumbnail phải chứa hash nội dung ở Phase 4.
 
 ## Risk Assessment
 
 **Rủi ro: bỏ qua `.photoslibrary` khiến user thấy "thiếu ảnh".** Trên máy đo, phần lớn 70k ảnh
 nằm trong bundle này. User mở `~/Pictures` sẽ thấy gần như trống.
 *Tín hiệu:* thư viện lớn nhưng grid gần rỗng.
+**Đã xác nhận bằng số đo (2026-08-15):** `~/Pictures` có **10** file media ngoài bundle,
+**70.822** file bên trong `.photoslibrary`. Mặc định hiện tại làm grid gần như trống trên máy này.
+Yêu cầu empty state của Phase 8 do đó là bắt buộc, không phải tuỳ chọn.
+
 *Phản ứng:* empty state phải nói rõ "đã bỏ qua N thư viện Photos, dùng `--include-bundles` để quét" —
 đây là yêu cầu bắt buộc của Phase 8, không phải gợi ý.
 
