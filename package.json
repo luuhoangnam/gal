@@ -1,0 +1,28 @@
+{
+  "name": "gal",
+  "version": "0.1.0",
+  "description": "Một lệnh mở gallery web cho toàn bộ ảnh/video trong một thư mục và mọi thư mục con",
+  "type": "module",
+  "bin": {
+    "gal": "./bin/gal.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "files": [
+    "bin",
+    "src",
+    "web"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "exifreader": "^4.42.0",
+    "image-size": "^2.0.2"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.62.1"
+  }
+}
