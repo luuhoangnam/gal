@@ -1,7 +1,7 @@
 {
   "name": "gal",
   "version": "0.1.0",
-  "description": "Một lệnh mở gallery web cho toàn bộ ảnh/video trong một thư mục và mọi thư mục con",
+  "description": "M\u1ed9t l\u1ec7nh m\u1edf gallery web cho to\u00e0n b\u1ed9 \u1ea3nh/video trong m\u1ed9t th\u01b0 m\u1ee5c v\u00e0 m\u1ecdi th\u01b0 m\u1ee5c con",
   "type": "module",
   "bin": {
     "gal": "./bin/gal.js"
@@ -15,7 +15,9 @@
   "files": [
     "bin",
     "src",
-    "web"
+    "web",
+    "README.md",
+    "LICENSE"
   ],
   "license": "MIT",
   "dependencies": {
@@ -25,5 +27,15 @@
   },
   "devDependencies": {
     "playwright-core": "^1.62.1"
-  }
+  },
+  "keywords": [
+    "photos",
+    "gallery",
+    "media",
+    "viewer",
+    "cli",
+    "exif",
+    "thumbnails",
+    "localhost"
+  ]
 }

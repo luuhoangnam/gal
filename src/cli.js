@@ -1,6 +1,13 @@
 import path from 'node:path';
-import { stat } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { stat, rm, readdir } from 'node:fs/promises';
 import { createServer } from './server.js';
+import { cacheDirFor } from './cache-dir.js';
+import { ffmpegPath, ffmpegMissingMessage } from './ffmpeg.js';
+
+const PKG = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+);
 
 const USAGE = `gal <thư mục> [tuỳ chọn]
 
@@ -9,9 +16,20 @@ const USAGE = `gal <thư mục> [tuỳ chọn]
   --port <số>          cổng, mặc định 0 = cổng ngẫu nhiên còn trống
   --watch              tự quét lại khi thư mục có thay đổi
   --include-bundles    quét cả bundle macOS (.photoslibrary, .app, ...)
-  --follow-symlinks    đi theo symlink thư mục`;
+  --follow-symlinks    đi theo symlink thư mục
+  --clear-cache        xoá index + thumbnail của thư mục rồi thoát
+  --version            in phiên bản
+  --help               bảng này
 
-const FLAGS = new Set(['--lan', '--watch', '--include-bundles', '--follow-symlinks', '-h', '--help']);
+Ví dụ:
+  gal ~/Pictures
+  gal . --port 8080
+  gal ~/Ảnh --lan --watch`;
+
+const FLAGS = new Set([
+  '--lan', '--watch', '--include-bundles', '--follow-symlinks',
+  '--clear-cache', '-h', '--help', '-v', '--version',
+]);
 const OPTS = new Set(['--host', '--port']);
 
 /** Parser tối giản: đủ cho 5 tuỳ chọn, không kéo thêm thư viện. */
@@ -40,6 +58,11 @@ export async function main(argv) {
     process.exit(1);
   }
 
+  if (opts.v || opts.version) {
+    console.log(PKG.version);
+    process.exit(0);
+  }
+
   if (positional.length === 0 || opts.h || opts.help) {
     console.log(USAGE);
     process.exit(0);
@@ -61,6 +84,15 @@ export async function main(argv) {
     }
   } catch {
     console.error(`gal: không tìm thấy: ${root}`);
+    process.exit(1);
+  }
+
+  if (opts['clear-cache']) return clearCache(root);
+
+  // Kiểm ffmpeg TRƯỚC khi mở server: không có nó thì mọi thumbnail đều hỏng, và
+  // một lưới toàn ô xám khó hiểu hơn nhiều so với một câu báo lỗi.
+  if (ffmpegPath() === null) {
+    console.error(ffmpegMissingMessage());
     process.exit(1);
   }
 
@@ -94,4 +126,36 @@ export async function main(argv) {
       console.log(`Cache thumbnail đang dùng ${(bytes / 1024 ** 3).toFixed(1)}GB tại ${server.thumbs.dir}`);
     }
   });
+}
+
+/** Dung lượng thư mục, đệ quy. Đủ dùng cho một con số in ra một lần. */
+async function dirSize(dir) {
+  let total = 0;
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    try {
+      if (e.isDirectory()) total += await dirSize(p);
+      else total += (await stat(p)).size;
+    } catch {
+      /* file biến mất giữa chừng */
+    }
+  }
+  return total;
+}
+
+/**
+ * Cache nằm trong `<root>/.gal` (hoặc /tmp khi root chỉ đọc), không phải một
+ * thư mục chung — nên xoá cache cần biết xoá cache CỦA THƯ MỤC NÀO.
+ */
+async function clearCache(root) {
+  const dir = cacheDirFor(root);
+  let bytes = 0;
+  try {
+    bytes = await dirSize(dir);
+  } catch {
+    console.log(`gal: không có cache nào tại ${dir}`);
+    return;
+  }
+  await rm(dir, { recursive: true, force: true });
+  console.log(`Đã xoá ${dir} — giải phóng ${(bytes / 1024 ** 2).toFixed(1)} MB`);
 }
