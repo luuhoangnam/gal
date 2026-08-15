@@ -198,8 +198,18 @@ button {
   pointer-events: none;
 }
 
+/* Nút mở bottom sheet lọc và nút "Xong" chỉ tồn tại ở mobile */
+#filterbtn,
+.done,
+.scrim {
+  display: none;
+}
+
 /* ---------- panel thư mục ---------- */
+/* Hiện/ẩn bằng class trên body, không phải thuộc tính `hidden`: mobile cần nó
+   luôn ở trong DOM để trượt lên được. */
 .side {
+  display: none;
   position: fixed;
   inset: var(--bars) auto 0 0;
   width: var(--side);
@@ -208,6 +218,9 @@ button {
   padding: 8px 0 20px;
   background: var(--bg-surface);
   border-right: 1px solid var(--border-strong);
+}
+body.side-on .side {
+  display: block;
 }
 body.side-on #scroller {
   left: var(--side);
@@ -562,6 +575,450 @@ kbd {
 }
 .pswp__meta span {
   color: rgba(255, 255, 255, 0.72);
+}
+
+/* ---------- feed toàn màn hình ---------- */
+/* Cuộn + bắt điểm dừng là việc của trình duyệt: `scroll-snap-type` làm đúng
+   quán tính của hệ điều hành, tự viết bằng JS thì không bao giờ giống. */
+.feed {
+  position: fixed;
+  inset: 0;
+  z-index: 110; /* trên cả PhotoSwipe (100) */
+  background: var(--bg-immersive);
+  overflow-x: hidden;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  /* Không để cú vuốt lọt xuống trang dưới → không kéo-để-tải-lại giữa feed */
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.fsizer {
+  position: relative;
+  width: 100%;
+}
+.fslide {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  scroll-snap-align: start;
+  /* Một cú vuốt = đúng một mục, kể cả khi vuốt mạnh. Đây là cảm giác TikTok. */
+  scroll-snap-stop: always;
+}
+/* Nền là chính thumbnail đã làm mờ: ảnh dọc không nằm giữa hai dải đen câm lặng.
+   inset âm để mép mờ không lộ ra viền trong suốt. */
+.fbg {
+  position: absolute;
+  inset: -10%;
+  background: center / cover no-repeat;
+  filter: blur(36px) saturate(1.4) brightness(0.42);
+}
+.fmedia {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+.fmedia.in {
+  opacity: 1;
+}
+video.fmedia {
+  width: 100%;
+  height: 100%;
+}
+.fchrome,
+.fbottom,
+.fplay,
+.fseekhint {
+  position: fixed;
+  z-index: 2;
+  color: #fff;
+}
+.fchrome {
+  inset: 0 0 auto 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(env(safe-area-inset-top) + 6px) 6px 44px;
+  background: linear-gradient(rgba(0, 0, 0, 0.55), transparent);
+  transition: opacity 0.2s;
+}
+.ficon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+}
+/* `display: grid` đè lên `display: none` mặc định của [hidden] — không có dòng
+   này thì nút loa vẫn hiện trên slide ảnh. */
+.ficon[hidden] {
+  display: none;
+}
+.ficon:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+#fsoundon,
+.unmuted #fsoundoff {
+  display: none;
+}
+.unmuted #fsoundon {
+  display: inline;
+}
+.fpos {
+  font-size: 13px;
+  font-weight: 560;
+  padding-right: 6px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+.fbottom {
+  inset: auto 0 0 0;
+  padding: 64px 14px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.78));
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.fmeta {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 4px 8px;
+  font-size: 13px;
+}
+.fmeta b {
+  font-size: 15px;
+  font-weight: 590;
+}
+.fmeta span {
+  color: rgba(255, 255, 255, 0.74);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* ---------- điều khiển video ---------- */
+.fctl {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto; /* .fbottom tắt để chữ không nuốt cú chạm tua */
+}
+.fctl[hidden] {
+  display: none;
+}
+#ficonpause,
+.playing #ficonplay {
+  display: none;
+}
+.playing #ficonpause {
+  display: inline;
+}
+.ftime {
+  font-size: 12px;
+  font-weight: 560;
+  min-width: 38px;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+/* Thanh tua: dựng trên <input type=range> để được kéo, phím mũi tên và nhãn
+   screen reader miễn phí. `touch-action: none` vì .feed nhận pan-y — không có
+   nó thì kéo ngang bị nuốt thành cuộn dọc. */
+.fseek {
+  flex: 1;
+  min-width: 0;
+  height: 44px; /* vùng chạm; vệt nhìn thấy do track vẽ, mảnh hơn nhiều */
+  margin: 0;
+  background: none;
+  appearance: none;
+  touch-action: none;
+  cursor: pointer;
+}
+.fseek::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  /* --p do JS đặt: phần đã xem đặc, phần còn lại mờ */
+  background: linear-gradient(
+    to right,
+    #fff 0 var(--p, 0%),
+    rgba(255, 255, 255, 0.32) var(--p, 0%) 100%
+  );
+}
+.fseek::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.fseek::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.32);
+}
+.fseek::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: #fff;
+}
+.fseek::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* Chỉ báo ∓10s của cú đúp: nhá rồi tự tắt bằng animation, không cần timer JS */
+.fseekhint {
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 600;
+  pointer-events: none;
+  opacity: 0;
+}
+.fseekhint.left {
+  right: 62%;
+}
+.fseekhint.right {
+  left: 62%;
+}
+.fseekhint.on {
+  animation: hint 0.62s ease-out;
+}
+.fseekhint.on::before {
+  content: '';
+  position: absolute;
+  inset: 50% 6% auto 6%;
+  height: 68px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42);
+  z-index: -1; /* opacity trên .fseekhint tạo stacking context → pill nằm sau chữ */
+}
+@keyframes hint {
+  0% {
+    opacity: 0;
+  }
+  18% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Chạm vào ảnh để xem trần, không có chữ đè lên */
+.feed.bare .fchrome,
+.feed.bare .fbottom {
+  opacity: 0;
+  pointer-events: none;
+}
+.fplay {
+  inset: 0;
+  display: none;
+  place-items: center;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 12px rgba(0, 0, 0, 0.7));
+  opacity: 0.92;
+}
+.feed.paused .fplay {
+  display: grid;
+}
+
+/* ---------- mobile ---------- */
+/* Điện thoại không có chỗ cho hai thanh công cụ và một sidebar. Lưới là ô vuông
+   ba cột để tìm, feed toàn màn hình để xem — hai chế độ, không hơn. */
+@media (max-width: 700px) {
+  :root {
+    --topbar: 56px;
+    --bars: calc(56px + env(safe-area-inset-top));
+  }
+
+  .bar {
+    height: var(--bars);
+    padding: env(safe-area-inset-top) 6px 0;
+    gap: 2px;
+  }
+  /* Kiểu lưới, mật độ, quét lại, phím tắt: không có bàn phím và không có chỗ */
+  .bar .seg,
+  #minus,
+  #plus,
+  #reset,
+  #refresh,
+  #helpbtn {
+    display: none;
+  }
+  .path b {
+    font-size: 17px;
+  }
+  .path span {
+    display: none; /* "— đang quét…" đã có sợi chỉ tiến trình nói hộ */
+  }
+  .icobtn {
+    width: 44px;
+    height: 44px;
+  }
+  #filterbtn {
+    display: grid;
+    position: relative;
+  }
+  /* Chấm báo "đang lọc": không có nó thì bộ lọc nằm khuất trong sheet, người
+     dùng quên mất là mình đang xem một tập con. */
+  #filterbtn.on::after {
+    content: '';
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* --- bottom sheet: thanh lọc và cây thư mục --- */
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.24s;
+  }
+  body.side-on .scrim,
+  body.filter-on .scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .fbar,
+  .side {
+    display: block;
+    position: fixed;
+    inset: auto 0 0 0;
+    width: auto;
+    height: auto;
+    max-height: 76dvh;
+    z-index: 60;
+    overflow: hidden auto;
+    overscroll-behavior: contain;
+    border: 0;
+    border-radius: 20px 20px 0 0;
+    background: var(--bg-surface);
+    box-shadow: 0 -10px 44px rgba(0, 0, 0, 0.24);
+    padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+    /* Sheet đóng nằm ngay dưới mép màn hình, chỉ trượt bằng transform */
+    transform: translateY(101%);
+    transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  body.filter-on .fbar,
+  body.side-on .side {
+    transform: none;
+  }
+  body.side-on #scroller,
+  body.side-on .stickhdr {
+    left: 0; /* sheet nổi lên trên lưới, không đẩy lưới sang bên */
+  }
+
+  .fbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    font-size: 15px;
+  }
+  .fbar > * {
+    flex: 1 1 100%;
+  }
+  .fbar .seg {
+    padding: 3px;
+  }
+  .fbar .seg button {
+    flex: 1;
+    min-height: 40px;
+  }
+  /* 16px là ngưỡng iOS không tự phóng to trang khi focus vào ô nhập */
+  .fbar input,
+  .fbar select {
+    font-size: 16px;
+    min-height: 44px;
+    padding: 8px 12px;
+    flex: 1;
+    min-width: 0;
+  }
+  .fbar input[type='search'],
+  .fbar input[type='number'] {
+    width: auto;
+  }
+  .fld {
+    display: flex;
+    gap: 8px;
+  }
+  /* Nút đảo chiều phải nằm cạnh ô "Xếp": một mũi tên ↓ đứng giữa một hàng
+     trống không nói lên nó đảo chiều cái gì. */
+  .fbar .fld:has(#sort) {
+    flex: 1 1 auto;
+  }
+  .fbar #asc {
+    flex: 0 0 56px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--bg-sunken);
+  }
+  .done,
+  .clr,
+  #emptyclear {
+    min-height: 44px;
+  }
+  .done {
+    display: block;
+    width: 100%;
+    /* Danh sách thư mục có thể dài hơn sheet — nút Xong phải luôn ở trong tầm
+       ngón tay, không nằm dưới đáy một danh sách 200 dòng. */
+    position: sticky;
+    bottom: 0;
+    border-radius: 12px;
+    font-weight: 590;
+    color: #fff;
+    background: var(--accent);
+  }
+
+  .side {
+    padding-top: 8px;
+  }
+  .side .done {
+    margin-top: 8px;
+  }
+  .dir {
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 15px;
+    border-radius: 10px;
+  }
+
+  /* Thanh năm là cách duy nhất đi xa trong thư viện lớn khi không có bàn phím */
+  .scrub {
+    width: 46px;
+  }
+  .empty {
+    padding: 0 24px;
+  }
+  .hdr {
+    font-size: 17px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

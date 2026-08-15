@@ -5,7 +5,7 @@
 
 const TYPING = new Set(['INPUT', 'TEXTAREA', 'SELECT']);
 
-export function bindKeyboard({ grid, actions, lightbox, help }) {
+export function bindKeyboard({ grid, actions, overlay, help }) {
   addEventListener('keydown', (e) => {
     // Đang gõ trong ô lọc: chỉ Esc có ý nghĩa (nhả focus), còn lại là ký tự.
     if (TYPING.has(e.target.tagName)) {
@@ -16,8 +16,8 @@ export function bindKeyboard({ grid, actions, lightbox, help }) {
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    // Lightbox và dialog trợ giúp tự lo phím của chúng (kể cả Esc).
-    if (lightbox()?.isOpen() || help.open) return;
+    // Lightbox, feed và dialog trợ giúp tự lo phím của chúng (kể cả Esc).
+    if (overlay() || help.open) return;
 
     switch (e.key) {
       case 'ArrowLeft':

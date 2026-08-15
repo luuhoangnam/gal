@@ -17,6 +17,12 @@ const fmtN = (n) => n.toLocaleString('vi-VN');
 const scroller = $('#scroller');
 const sizer = $('#sizer');
 
+/**
+ * Ngưỡng mobile. Dùng `matchMedia` chứ không phải đo một lần lúc tải: xoay máy
+ * và cửa sổ desktop hẹp lại đều phải đổi giao diện ngay.
+ */
+const mobile = matchMedia('(max-width: 700px)');
+
 const grid = createGrid({
   scroller,
   sizer,
@@ -29,7 +35,8 @@ const grid = createGrid({
       body: JSON.stringify({ keys }),
     }).catch(() => {});
   },
-  onOpen: (index) => openLightbox(index),
+  // Mobile mở feed toàn màn hình (vuốt dọc), desktop mở lightbox (zoom, bàn phím)
+  onOpen: (index) => (mobile.matches ? openFeed(index) : openLightbox(index)),
 });
 
 const scrubber = createScrubber({ el: $('#scrub'), scroller, grid });
@@ -44,6 +51,18 @@ async function openLightbox(index) {
   }
   lightbox.open(index);
 }
+
+// Cùng lý do: điện thoại không tải PhotoSwipe, desktop không tải feed.
+let feed = null;
+async function openFeed(index) {
+  if (feed === null) {
+    const { createFeed } = await import('./feed.js');
+    feed = createFeed({ grid, root: $('#feed') });
+  }
+  feed.open(index);
+}
+
+const overlayOpen = () => Boolean(feed?.isOpen() || lightbox?.isOpen());
 
 // ---------- trạng thái ----------
 const items = new Map(); // id -> item
@@ -182,6 +201,9 @@ function updateEmpty() {
   }
   $('#emptyclear').hidden = !filtered;
   $('#clear').hidden = !filtered;
+  // Trên mobile bộ lọc nằm khuất trong sheet — chấm này là thứ duy nhất nói
+  // cho người dùng biết họ đang xem một tập con.
+  $('#filterbtn').classList.toggle('on', filtered);
 }
 
 /**
@@ -392,13 +414,37 @@ for (const b of document.querySelectorAll('#side > .dir')) {
   b.onclick = () => setCriteria({ dir: '' });
 }
 
-$('#sidetoggle').onclick = () => {
-  const open = $('#side').hidden;
-  $('#side').hidden = !open;
-  $('#sidetoggle').setAttribute('aria-pressed', String(open));
-  document.body.classList.toggle('side-on', open);
+/**
+ * Panel thư mục và thanh lọc. Trên desktop panel đẩy lưới sang bên; trên mobile
+ * cả hai là bottom sheet nổi lên trên. Cùng một class, CSS lo phần khác nhau —
+ * chỉ có một luật ở đây: không mở hai cái cùng lúc.
+ */
+function setSheet(name) {
+  const on = name !== null && !document.body.classList.contains(`${name}-on`);
+  document.body.classList.remove('side-on', 'filter-on');
+  if (on) document.body.classList.add(`${name}-on`);
+  $('#sidetoggle').setAttribute('aria-pressed', String(on && name === 'side'));
+  $('#filterbtn').setAttribute('aria-pressed', String(on && name === 'filter'));
   grid.relayout(8); // bề rộng lưới đổi → phải xếp lại, giữ nguyên ô đang xem
-};
+}
+$('#sidetoggle').onclick = () => setSheet('side');
+$('#filterbtn').onclick = () => setSheet('filter');
+$('#scrim').onclick = () => setSheet(null);
+$('#filterdone').onclick = () => setSheet(null);
+$('#sidedone').onclick = () => setSheet(null);
+
+/**
+ * Mobile: lưới luôn là ô vuông, mật độ cố định ~3 cột. Justified/masonry và
+ * nút mật độ chỉ có nghĩa khi có chuột và một cửa sổ rộng.
+ */
+function applyViewport() {
+  setSheet(null);
+  if (mobile.matches) {
+    setMode('square');
+    setTarget(140);
+  } else setTarget(0);
+}
+mobile.addEventListener('change', applyViewport);
 
 $('#helpbtn').onclick = () => $('#help').showModal();
 
@@ -438,7 +484,7 @@ async function watchLoop() {
 
 bindKeyboard({
   grid,
-  lightbox: () => lightbox,
+  overlay: overlayOpen,
   help: $('#help'),
   actions: {
     open: openLightbox,
@@ -486,7 +532,7 @@ function demoState() {
 demoState();
 
 syncControls();
-setTarget(0);
+applyViewport();
 window.__gal = { grid, items, get criteria() { return criteria; }, setCriteria, applyFilters };
 scan();
 watchLoop();

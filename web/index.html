@@ -2,7 +2,8 @@
 <html lang="vi">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0b0d" />
     <title>gal</title>
     <link rel="stylesheet" href="/vendor/photoswipe/photoswipe.css" />
     <link rel="stylesheet" href="/styles.css" />
@@ -15,6 +16,18 @@
       <div class="path"><b>gal</b><span id="sub">— đang quét…</span></div>
       <div class="spacer"></div>
       <span class="count" id="cnt"></span>
+      <!-- Chỉ hiện trên mobile: thanh lọc ở đó là bottom sheet, phải có nút mở -->
+      <button class="icobtn" id="filterbtn" aria-label="Lọc" aria-pressed="false" title="Lọc">
+        <svg viewBox="0 0 20 20" aria-hidden="true" width="19" height="19">
+          <path
+            d="M3 5h14M6 10h8M9 15h2"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
       <div class="seg" role="group" aria-label="Kiểu lưới">
         <button data-mode="justified" aria-pressed="true">Justified</button>
         <button data-mode="square" aria-pressed="false">Ô vuông</button>
@@ -62,6 +75,7 @@
         </select>
       </label>
       <button class="clr" id="clear" hidden>Xoá lọc</button>
+      <button class="done" id="filterdone">Xong</button>
       <!-- Chỉ để mở date picker native bằng phím G; không hiện trên thanh -->
       <input type="date" id="goto" class="vh" aria-label="Nhảy tới ngày" />
     </div>
@@ -69,10 +83,14 @@
     <div class="scan" id="scan"></div>
     <div class="stickhdr" id="stick" aria-hidden="true"></div>
 
-    <aside class="side" id="side" hidden aria-label="Thư mục">
+    <aside class="side" id="side" aria-label="Thư mục">
       <button class="dir" data-dir="" aria-pressed="true">Tất cả thư mục</button>
       <div id="dirs"></div>
+      <button class="done" id="sidedone">Xong</button>
     </aside>
+
+    <!-- Nền mờ của bottom sheet; chạm để đóng. Chỉ hiện trên mobile. -->
+    <div class="scrim" id="scrim"></div>
 
     <div id="scroller" tabindex="0">
       <div id="sizer" role="list" aria-label="Ảnh và video"></div>
@@ -92,6 +110,86 @@
         </div>
       </div>
       <div class="scrub" id="scrub" aria-hidden="true"></div>
+    </div>
+
+    <!-- Feed toàn màn hình: vuốt dọc từng mục một, snap như TikTok. Chỉ mở trên
+         mobile; desktop vẫn dùng PhotoSwipe (có zoom, có bàn phím). -->
+    <div class="feed" id="feed" hidden tabindex="-1" aria-label="Xem toàn màn hình">
+      <div class="fsizer" id="fsizer"></div>
+
+      <div class="fchrome">
+        <button class="ficon" id="fclose" aria-label="Đóng">
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22">
+            <path
+              d="M6 6l12 12M18 6L6 18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+        <div class="spacer"></div>
+        <span class="fpos" id="fpos"></span>
+        <button class="ficon" id="fsound" aria-label="Bật tiếng" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22">
+            <path
+              d="M4 9v6h4l5 4V5L8 9H4z"
+              fill="currentColor"
+            />
+            <path
+              id="fsoundoff"
+              d="M16 9l5 6M21 9l-5 6"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+            <path
+              id="fsoundon"
+              d="M16.5 9.5a3.5 3.5 0 010 5M19 7a7 7 0 010 10"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Chỉ báo tạm dừng; pointer-events:none để không nuốt cú chạm tiếp theo -->
+      <div class="fplay" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="76" height="76">
+          <path d="M8 5l12 7-12 7z" fill="currentColor" />
+        </svg>
+      </div>
+
+      <!-- Đúp trái/phải ∓10s: nhá một lần rồi tự tắt bằng animation, không timer -->
+      <div class="fseekhint" id="fseekhint" aria-hidden="true"></div>
+
+      <div class="fbottom">
+        <div class="fmeta" id="fmeta"></div>
+        <div class="fctl" id="fctl" hidden>
+          <button class="ficon" id="fplaypause" aria-label="Tạm dừng">
+            <svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22">
+              <path id="ficonplay" d="M7 4l13 8-13 8z" fill="currentColor" />
+              <path id="ficonpause" d="M7 4h4v16H7zM14 4h4v16h-4z" fill="currentColor" />
+            </svg>
+          </button>
+          <span class="ftime" id="ftime">0:00</span>
+          <input
+            class="fseek"
+            id="fseek"
+            type="range"
+            min="0"
+            max="1"
+            step="0.1"
+            value="0"
+            aria-label="Tua video"
+          />
+          <span class="ftime" id="fdur">0:00</span>
+        </div>
+      </div>
     </div>
 
     <dialog id="help">
